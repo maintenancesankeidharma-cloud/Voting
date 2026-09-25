@@ -227,7 +227,7 @@ async function loadDashboard() {
   body.innerHTML = rows
     .map((r) => {
       const st = r.status || "mungkin";
-      const symbols = { ya: "✓", tidak: "✗", mungkin: "?" };
+      const symbols = { ya: "✅", tidak: "❌", mungkin: "🤔" };
       const symbol = symbols[st] || st;
       const badge = '<span class="badge ' + st + '">' + symbol + "</span>";
       const time = r.created_at
