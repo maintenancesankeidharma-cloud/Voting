@@ -11,4 +11,4 @@ window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXB
 // PASSWORD ADMIN (untuk buka panel kelola event)
 // Ganti sesuai keinginan Anda.
 // ============================================================
-window.ADMIN_PASSWORD = "ganti123";
+window.ADMIN_PASSWORD = "Sankei2025";
