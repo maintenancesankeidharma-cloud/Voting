@@ -283,7 +283,7 @@ async function loadVilla() {
 
   grid.innerHTML = rows.map((v) =>
     '<div class="villa-card">' +
-    (v.foto_url ? '<img src="' + escapeHtml(v.foto_url) + '" alt="' + escapeHtml(v.nama) + '" onerror="this.outerHTML=\'<div class=\\\"vc-noimg\\\">Gambar tidak tersedia</div>\'" />' : '<div class="vc-noimg">Tanpa gambar</div>') +
+    (v.foto_url ? '<img src="' + escapeHtml(v.foto_url) + '" alt="' + escapeHtml(v.nama) + '" onerror="villaImgError(this)" />' : '<div class="vc-noimg">Tanpa gambar</div>') +
     '<div class="vc-body">' +
     '<div class="vc-name">' + escapeHtml(v.nama) + "</div>" +
     (v.fasilitas ? '<div class="vc-fas">' + escapeHtml(v.fasilitas) + "</div>" : "") +
@@ -491,6 +491,10 @@ async function deleteVilla(id) {
   const { error } = await client.from("villa").delete().eq("id", id);
   if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
   manageVilla(currentAdminEventId);
+}
+
+function villaImgError(img) {
+  img.outerHTML = '<div class="vc-noimg">Gambar tidak tersedia</div>';
 }
 
 function escapeHtml(s) {
