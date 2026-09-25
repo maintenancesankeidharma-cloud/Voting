@@ -102,8 +102,7 @@ async function openEvent(id) {
   document.querySelectorAll(".option").forEach((o) =>
     o.classList.remove("selected-yes", "selected-no", "selected-maybe")
   );
-  selectedStatus = null;
-
+  switchTab("vote");
   loadDashboard();
 }
 
@@ -243,6 +242,44 @@ async function loadDashboard() {
     .join("");
 }
 
+// ---------- TAB & VILLA ----------
+function switchTab(tab) {
+  document.getElementById("tabVoteBtn").classList.toggle("active", tab === "vote");
+  document.getElementById("tabVillaBtn").classList.toggle("active", tab === "villa");
+  document.getElementById("panelVote").style.display = tab === "vote" ? "block" : "none";
+  document.getElementById("panelVilla").style.display = tab === "villa" ? "block" : "none";
+  if (tab === "villa") loadVilla();
+}
+
+async function loadVilla() {
+  const grid = document.getElementById("villaGrid");
+  const note = document.getElementById("villaNote");
+  const client = getSupabase();
+  if (!client) { note.textContent = "Supabase belum dikonfigurasi."; grid.innerHTML = ""; return; }
+
+  const { data, error } = await client
+    .from("villa")
+    .select("id,nama,foto_url,fasilitas,harga")
+    .eq("event_id", currentEventId)
+    .order("created_at", { ascending: true });
+
+  if (error) { note.textContent = "Gagal memuat: " + (error.message || error); grid.innerHTML = ""; return; }
+
+  const rows = data || [];
+  note.textContent = rows.length ? rows.length + " pilihan penginapan." : "Belum ada penginapan untuk event ini.";
+  if (!rows.length) { grid.innerHTML = '<div class="empty">Belum ada data penginapan.</div>'; return; }
+
+  grid.innerHTML = rows.map((v) =>
+    '<div class="villa-card">' +
+    (v.foto_url ? '<img src="' + escapeHtml(v.foto_url) + '" alt="' + escapeHtml(v.nama) + '" onerror="this.style.display=\'none\'" />' : '<img style="display:none;" />') +
+    '<div class="vc-body">' +
+    '<div class="vc-name">' + escapeHtml(v.nama) + "</div>" +
+    (v.fasilitas ? '<div class="vc-fas">' + escapeHtml(v.fasilitas) + "</div>" : "") +
+    (v.harga ? '<div class="vc-price">' + escapeHtml(v.harga) + "</div>" : "") +
+    "</div></div>"
+  ).join("");
+}
+
 // ---------- ADMIN ----------
 function openAdmin() {
   const modal = document.getElementById("adminModal");
@@ -294,6 +331,7 @@ async function renderAdmin() {
         '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' +
         (e.aktif ? "Aktif" : "Nonaktif") + "</div></div>" +
         '<div class="ar-actions">' +
+        '<button type="button" class="btn btn-sm" data-action="manageVilla" data-id="' + e.id + '">🏠 Penginapan</button>' +
         '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">🔗 Salin Link</button>' +
         '<button type="button" class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" data-action="toggleEvent" data-id="' + e.id + '" data-aktif="' + (e.aktif ? "true" : "false") + '">' +
         (e.aktif ? "Nonaktifkan" : "Aktifkan") + "</button>" +
@@ -366,6 +404,60 @@ async function deleteEvent(id, nama) {
   renderAdmin();
 }
 
+// ---------- ADMIN: KELOLA VILLA (penginapan) ----------
+let currentAdminEventId = null;
+
+async function manageVilla(eventId) {
+  currentAdminEventId = eventId;
+  const body = document.getElementById("adminBody");
+  const client = getSupabase();
+  if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
+
+  const { data: ev } = await client.from("events").select("nama").eq("id", eventId).single();
+  const { data, error } = await client.from("villa").select("id,nama,foto_url,fasilitas,harga").eq("event_id", eventId).order("created_at", { ascending: true });
+
+  const rows = (data || []).map((v) =>
+    '<div class="admin-row">' +
+    '<div class="ar-name">' + escapeHtml(v.nama) +
+    (v.harga ? '<div style="font-size:0.75rem;color:var(--primary);font-weight:600;">' + escapeHtml(v.harga) + "</div>" : "") +
+    "</div>" +
+    '<div class="ar-actions"><button type="button" class="btn btn-sm btn-danger" data-action="deleteVilla" data-id="' + v.id + '">Hapus</button></div>' +
+    "</div>"
+  ).join("");
+
+  body.innerHTML =
+    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
+    '<h2 style="font-size:1.1rem;margin-bottom:4px;">🏠 Penginapan: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
+    '<div class="dashboard-note">Tambah katalog villa untuk event ini.</div>' +
+    '<div class="form-group"><label for="vNama">Nama Villa</label><input type="text" id="vNama" placeholder="Contoh: Villa Melati" /></div>' +
+    '<div class="form-group"><label for="vFoto">URL Foto</label><input type="text" id="vFoto" placeholder="https://gambar.example.com/villa.jpg" /></div>' +
+    '<div class="form-group"><label for="vFas">Fasilitas (pisahkan dengan baris baru)</label><textarea id="vFas" placeholder="Kapasitas 10 orang&#10;Kolam renang&#10;Dapur lengkap"></textarea></div>' +
+    '<div class="form-group"><label for="vHarga">Harga</label><input type="text" id="vHarga" placeholder="Rp 1.500.000 / malam" /></div>' +
+    '<button type="button" class="btn" data-action="addVilla">Simpan Villa</button>' +
+    '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Villa</h3>' +
+    (rows || '<div class="empty">Belum ada villa.</div>') + "</div>";
+}
+
+async function addVilla() {
+  const nama = document.getElementById("vNama").value.trim();
+  const foto = document.getElementById("vFoto").value.trim();
+  const fas = document.getElementById("vFas").value.trim();
+  const harga = document.getElementById("vHarga").value.trim();
+  if (!nama) { adminMsg("Nama villa wajib diisi.", "error"); return; }
+  const client = getSupabase();
+  const { error } = await client.from("villa").insert({ event_id: currentAdminEventId, nama, foto_url: foto, fasilitas: fas, harga });
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  manageVilla(currentAdminEventId);
+}
+
+async function deleteVilla(id) {
+  if (!confirm("Hapus villa ini?")) return;
+  const client = getSupabase();
+  const { error } = await client.from("villa").delete().eq("id", id);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  manageVilla(currentAdminEventId);
+}
+
 function escapeHtml(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -381,6 +473,10 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "copyLink") copyLink(el.dataset.id);
   else if (a === "toggleEvent") toggleEvent(el.dataset.id, el.dataset.aktif === "true");
   else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
+  else if (a === "manageVilla") manageVilla(el.dataset.id);
+  else if (a === "addVilla") addVilla();
+  else if (a === "deleteVilla") deleteVilla(el.dataset.id);
+  else if (a === "backEvents") renderAdmin();
 });
 
 // ---------- Init ----------

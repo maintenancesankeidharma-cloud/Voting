@@ -94,6 +94,38 @@
     .event-title h2 { border: none; margin: 0; padding: 0; }
     .event-title .keterangan { color: var(--muted); font-size: 0.9rem; }
 
+    /* TABS */
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+    .tab {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #f8fafc;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--muted);
+      transition: all 0.15s ease;
+    }
+    .tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* VILLA */
+    .villa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+    .villa-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+    .villa-card img { width: 100%; height: 160px; object-fit: cover; background: #f1f5f9; }
+    .villa-card .vc-body { padding: 14px; display: flex; flex-direction: column; flex: 1; }
+    .villa-card .vc-name { font-weight: 700; font-size: 1.05rem; margin-bottom: 6px; }
+    .villa-card .vc-fas { color: var(--text); font-size: 0.85rem; margin-bottom: 10px; flex: 1; white-space: pre-line; }
+    .villa-card .vc-price { font-weight: 800; color: var(--primary); font-size: 1.05rem; }
+
     /* FORM */
     .form-group { margin-bottom: 18px; }
     .form-group label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.95rem; }
@@ -280,6 +312,13 @@
         </div>
       </div>
 
+      <div class="tabs">
+        <button type="button" class="tab active" id="tabVoteBtn" onclick="switchTab('vote')">🗳️ Voting</button>
+        <button type="button" class="tab" id="tabVillaBtn" onclick="switchTab('villa')">🏠 Penginapan</button>
+      </div>
+
+      <!-- TAB VOTING -->
+      <div id="panelVote">
       <h2 style="font-size:1rem;">✍️ Form Keikutsertaan</h2>
       <form id="voteForm" autocomplete="on" onsubmit="return submitVote(event)">
         <div class="form-group">
@@ -341,6 +380,13 @@
           <tr><td colspan="6" class="empty">Belum ada respons.</td></tr>
         </tbody>
       </table>
+      </div><!-- /panelVote -->
+
+      <!-- TAB PENGINAPAN -->
+      <div id="panelVilla" style="display:none;">
+        <div class="dashboard-note" id="villaNote">Memuat katalog penginapan...</div>
+        <div class="villa-grid" id="villaGrid"></div>
+      </div>
     </div>
 
     <footer>Voting Keikutsertaan Gathering &bull; Diperbarui otomatis</footer>

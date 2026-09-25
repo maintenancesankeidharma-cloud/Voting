@@ -24,6 +24,17 @@ create table if not exists public.responses (
   created_at timestamptz not null default now()
 );
 
+-- 3) Tabel villa (katalog penginapan per event)
+create table if not exists public.villa (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid references public.events (id) on delete cascade,
+  nama text not null,
+  foto_url text default '',
+  fasilitas text default '',
+  harga text default '',
+  created_at timestamptz not null default now()
+);
+
 -- ============================================================
 -- KEBUTUHAN UNTUK TABEL LAMA (yang sudah ada kolomnya)
 -- ============================================================
@@ -40,6 +51,7 @@ alter table public.responses
 -- 3) Aktifkan Row Level Security
 alter table public.events enable row level security;
 alter table public.responses enable row level security;
+alter table public.villa enable row level security;
 
 -- 4) Policy: baca & tulis (insert/select/update/delete) publik.
 --    Catatan: panel admin dilindungi password di sisi aplikasi,
@@ -69,5 +81,18 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename = 'responses' and policyname = 'allow public delete') then
     create policy "allow public delete" on public.responses for delete using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public select') then
+    create policy "allow public select" on public.villa for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public insert') then
+    create policy "allow public insert" on public.villa for insert with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public update') then
+    create policy "allow public update" on public.villa for update using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public delete') then
+    create policy "allow public delete" on public.villa for delete using (true);
   end if;
 end $$;
