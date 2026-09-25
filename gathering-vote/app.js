@@ -1,4 +1,4 @@
-let supabase = null;
+let sbClient = null;
 let selectedStatus = null;
 let currentEventId = null;
 let adminAuthed = sessionStorage.getItem("vote_admin_auth") === "1";
@@ -7,12 +7,12 @@ const STATUS_LABEL = { ya: "Ya, Hadir", tidak: "Tidak Hadir", mungkin: "Mungkin"
 
 // ---------- Supabase ----------
 function getSupabase() {
-  if (supabase) return supabase;
+  if (sbClient) return sbClient;
   const url = window.SUPABASE_URL || "";
   const key = window.SUPABASE_ANON_KEY || "";
   if (!url.startsWith("http") || key.indexOf(".") < 0) return null;
-  supabase = window.supabase.createClient(url, key);
-  return supabase;
+  sbClient = window.supabase.createClient(url, key);
+  return sbClient;
 }
 
 // ---------- Router ----------
