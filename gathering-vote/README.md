@@ -1,24 +1,27 @@
-# Voting Keikutsertaan Gathering
+# Voting Keikutsertaan Gathering (Multi-Event)
 
-Website satu halaman untuk voting keikutsertaan gathering kegiatan (Ya / Tidak / Mungkin) lengkap dengan dashboard ringkasan hasil. Data disimpan di **Supabase**, website di-host di **GitHub Pages**.
+Platform voting keikutsertaan gathering untuk **banyak event/kegiatan**. Setiap event punya form voting (Ya / Tidak / Mungkin) dan dashboard summary sendiri. Data disimpan di **Supabase**, website di-host di **GitHub Pages**.
 
 ## Fitur
-- Form voting: Nama + Kontak + pilih status (Ya / Tidak / Mungkin)
-- Dashboard summary: jumlah & persentase per status, grafik batang, dan daftar peserta
-- Data gabungan semua peserta (dari Supabase), otomatis diperbarui
+- **Multi-event**: admin bisa membuat banyak event; peserta memilih event lalu vote
+- Form voting: Nama + Email + No. WA + status (Ya / Tidak / Mungkin), dengan autofill browser
+- Dashboard per event: jumlah & persentase per status, grafik batang, daftar peserta
+- Panel Admin (dilindungi password di `config.js`): buat event, aktif/nonaktif, hapus
 
 ## 1. Setup Supabase
 
 1. Buat proyek gratis di [supabase.com](https://supabase.com)
 2. Buka **SQL Editor** → New query → salin isi `supabase-schema.sql` → Run
+   (file ini membuat tabel `events` + `responses` serta kebijakan RLS)
 3. Buka **Settings → API**. Salin `Project URL` dan `anon public` key.
 4. Buka **`config.js`** lalu isi:
    ```js
    window.SUPABASE_URL = "https://xxxx.supabase.co";
    window.SUPABASE_ANON_KEY = "eyJhbGci...";
+   window.ADMIN_PASSWORD = "password-admin-anda";
    ```
 
-> Keamanan: karena pakai `anon` key dengan RLS, publik hanya bisa INSERT & SELECT. Disarankan dashboard tidak menampilkan data terlalu sensitif.
+> Jika sudah punya tabel `responses` lama (kolom `kontak`), jalankan SQL `alter table public.responses add column if not exists email text, add column if not exists no_wa text, add column if not exists event_id uuid references public.events (id) on delete cascade;`
 
 ## 2. Uji lokal
 Buka `index.html` di browser (atau jalankan `python -m http.server` lalu buka `http://localhost:8000`).
@@ -71,9 +74,9 @@ Buka `index.html` di browser (atau jalankan `python -m http.server` lalu buka `h
 ## Struktur File
 ```
 gathering-vote/
-├── index.html           # Halaman form + dashboard
-├── app.js               # Logika voting & tampilan dashboard
-├── config.js            # ★ Isi URL & anon key Supabase di sini
-├── supabase-schema.sql  # Skema tabel + kebijakan RLS
+├── index.html           # Halaman: daftar event, voting + dashboard, panel admin
+├── app.js               # Logika routing, voting, dashboard, admin CRUD
+├── config.js            # ★ Isi URL, anon key Supabase & password admin di sini
+├── supabase-schema.sql  # Skema tabel events/responses + kebijakan RLS
 └── .github/workflows/deploy.yml  # Workflow deploy GitHub Pages
 ```

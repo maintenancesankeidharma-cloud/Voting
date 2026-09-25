@@ -1,27 +1,117 @@
 let supabase = null;
 let selectedStatus = null;
+let currentEventId = null;
+let adminAuthed = sessionStorage.getItem("vote_admin_auth") === "1";
 
-// Status label & badge helpers
 const STATUS_LABEL = { ya: "Ya, Hadir", tidak: "Tidak Hadir", mungkin: "Mungkin" };
 
+// ---------- Supabase ----------
 function getSupabase() {
   if (supabase) return supabase;
   const url = window.SUPABASE_URL || "";
   const key = window.SUPABASE_ANON_KEY || "";
-  if (!url.startsWith("http") || key.indexOf(".") < 0) {
-    return null; // belum dikonfigurasi
-  }
+  if (!url.startsWith("http") || key.indexOf(".") < 0) return null;
   supabase = window.supabase.createClient(url, key);
   return supabase;
+}
+
+// ---------- Router ----------
+function router() {
+  const hash = (location.hash || "#/").replace("#", "");
+  if (hash.startsWith("/e/")) {
+    const id = hash.split("/")[2];
+    if (id) { openEvent(id); return; }
+  }
+  renderHome();
+}
+window.addEventListener("hashchange", router);
+
+function goHome() { location.hash = "#/"; }
+
+// ---------- HOME ----------
+async function renderHome() {
+  document.getElementById("viewHome").style.display = "block";
+  document.getElementById("viewEvent").style.display = "none";
+  const list = document.getElementById("eventList");
+  const note = document.getElementById("homeNote");
+
+  const client = getSupabase();
+  if (!client) {
+    note.textContent = "Supabase belum dikonfigurasi di config.js.";
+    list.innerHTML = '<div class="empty">Tidak bisa memuat event.</div>';
+    return;
+  }
+
+  const { data, error } = await client
+    .from("events")
+    .select("id,nama,keterangan,aktif")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    note.textContent = "Gagal memuat: " + (error.message || error);
+    return;
+  }
+
+  const active = (data || []).filter((e) => e.aktif);
+  note.textContent = active.length + " kegiatan aktif.";
+
+  if (!active.length) {
+    list.innerHTML = '<div class="empty">Belum ada kegiatan. Hubungi admin.</div>';
+    return;
+  }
+
+  list.innerHTML = active
+    .map(
+      (e) =>
+        '<div class="event-card" onclick="location.hash=\'#/e/' + e.id + '\'">' +
+        '<div class="ec-body"><div class="ec-name">' + escapeHtml(e.nama) + "</div>" +
+        (e.keterangan ? '<div class="ec-desc">' + escapeHtml(e.keterangan) + "</div>" : "") +
+        "</div><div class='ec-arrow'>›</div></div>"
+    )
+    .join("");
+}
+
+// ---------- EVENT ----------
+async function openEvent(id) {
+  document.getElementById("viewHome").style.display = "none";
+  document.getElementById("viewEvent").style.display = "block";
+  document.getElementById("totalText").textContent = "Memuat...";
+  currentEventId = id;
+
+  const client = getSupabase();
+  if (!client) { alert("Supabase belum dikonfigurasi."); return; }
+
+  const { data, error } = await client
+    .from("events")
+    .select("id,nama,keterangan,aktif")
+    .eq("id", id)
+    .single();
+
+  if (error || !data) {
+    document.getElementById("evTitle").textContent = "Event tidak ditemukan";
+    document.getElementById("evDesc").textContent = "";
+    return;
+  }
+
+  document.getElementById("evTitle").textContent = data.nama;
+  document.getElementById("evDesc").textContent = data.keterangan || "";
+
+  // reset form
+  document.getElementById("voteForm").reset();
+  document.querySelectorAll(".option").forEach((o) =>
+    o.classList.remove("selected-yes", "selected-no", "selected-maybe")
+  );
+  selectedStatus = null;
+
+  loadDashboard();
 }
 
 function selectOption(el) {
   document.querySelectorAll(".option").forEach((o) =>
     o.classList.remove("selected-yes", "selected-no", "selected-maybe")
   );
-  const v = el.dataset.value;
-  selectedStatus = v;
-  el.classList.add(v === "ya" ? "selected-yes" : v === "tidak" ? "selected-no" : "selected-maybe");
+  selectedStatus = el.dataset.value;
+  el.classList.add(selectedStatus === "ya" ? "selected-yes" : selectedStatus === "tidak" ? "selected-no" : "selected-maybe");
 }
 
 function showMessage(text, type) {
@@ -30,36 +120,33 @@ function showMessage(text, type) {
   m.textContent = text;
 }
 
-async function submitVote() {
+async function submitVote(event) {
+  if (event) event.preventDefault();
   const nama = document.getElementById("nama").value.trim();
-  const kontak = document.getElementById("kontak").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const nowa = document.getElementById("nowa").value.trim();
   const btn = document.getElementById("submitBtn");
 
-  showMessage("", "success"); // reset
+  showMessage("", "success");
 
   if (!nama) return showMessage("Nama wajib diisi.", "error");
-  if (!kontak) return showMessage("Kontak wajib diisi.", "error");
+  if (!email) return showMessage("Email wajib diisi.", "error");
+  if (!nowa) return showMessage("No. WA wajib diisi.", "error");
   if (!selectedStatus) return showMessage("Pilih salah satu status kehadiran.", "error");
 
   const client = getSupabase();
-  if (!client) {
-    showMessage("Supabase belum dikonfigurasi. Isi config.js dengan URL & anon key.", "warning");
-    return;
-  }
+  if (!client) { showMessage("Supabase belum dikonfigurasi.", "warning"); return; }
 
   btn.disabled = true;
   btn.textContent = "Mengirim...";
   try {
     const { error } = await client.from("responses").insert({
-      nama: nama,
-      kontak: kontak,
-      status: selectedStatus,
+      event_id: currentEventId,
+      nama, email, no_wa: nowa, status: selectedStatus,
     });
     if (error) throw error;
-
     showMessage("Voting berhasil dikirim. Terima kasih!", "success");
-    document.getElementById("nama").value = "";
-    document.getElementById("kontak").value = "";
+    document.getElementById("voteForm").reset();
     document.querySelectorAll(".option").forEach((o) =>
       o.classList.remove("selected-yes", "selected-no", "selected-maybe")
     );
@@ -75,31 +162,25 @@ async function submitVote() {
 
 async function loadDashboard() {
   const client = getSupabase();
-  const yes = document.getElementById("countYes");
-  const no = document.getElementById("countNo");
-  const maybe = document.getElementById("countMaybe");
   const body = document.getElementById("respTable");
   const totalText = document.getElementById("totalText");
 
   if (!client) {
-    yes.textContent = "–";
-    no.textContent = "–";
-    maybe.textContent = "–";
-    totalText.textContent = "Konfigurasi Supabase belum diisi di config.js.";
-    body.innerHTML =
-      '<tr><td colspan="4" class="empty">Belum bisa memuat data (Supabase belum dikonfigurasi).</td></tr>';
+    totalText.textContent = "Supabase belum dikonfigurasi.";
+    body.innerHTML = '<tr><td colspan="5" class="empty">Tidak bisa memuat.</td></tr>';
     return;
   }
 
   const { data, error } = await client
     .from("responses")
-    .select("nama,kontak,status,created_at")
+    .select("nama,email,no_wa,status,created_at")
+    .eq("event_id", currentEventId)
     .order("created_at", { ascending: false })
     .limit(200);
 
   if (error) {
-    body.innerHTML =
-      '<tr><td colspan="4" class="empty">Gagal memuat: ' + (error.message || error) + "</td></tr>";
+    totalText.textContent = "Gagal memuat.";
+    body.innerHTML = '<tr><td colspan="5" class="empty">' + escapeHtml(error.message) + "</td></tr>";
     return;
   }
 
@@ -109,9 +190,9 @@ async function loadDashboard() {
   const cMaybe = rows.filter((r) => r.status === "mungkin").length;
   const total = rows.length;
 
-  yes.textContent = cYes;
-  no.textContent = cNo;
-  maybe.textContent = cMaybe;
+  document.getElementById("countYes").textContent = cYes;
+  document.getElementById("countNo").textContent = cNo;
+  document.getElementById("countMaybe").textContent = cMaybe;
 
   const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
   document.getElementById("pctYes").textContent = pct(cYes) + "%";
@@ -124,7 +205,7 @@ async function loadDashboard() {
   totalText.textContent = total + " peserta terdaftar.";
 
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="4" class="empty">Belum ada respons.</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="empty">Belum ada respons.</td></tr>';
     return;
   }
 
@@ -133,28 +214,143 @@ async function loadDashboard() {
       const st = r.status || "mungkin";
       const badge = '<span class="badge ' + st + '">' + (STATUS_LABEL[st] || st) + "</span>";
       const time = r.created_at
-        ? new Date(r.created_at).toLocaleString("id-ID", {
-            day: "2-digit",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
+        ? new Date(r.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
         : "–";
       return (
-        "<tr><td>" + escapeHtml(r.nama) + "</td><td>" + escapeHtml(r.kontak) +
-        "</td><td>" + badge + "</td><td>" + time + "</td></tr>"
+        "<tr><td>" + escapeHtml(r.nama) + "</td><td>" + escapeHtml(r.email) +
+        "</td><td>" + escapeHtml(r.no_wa) + "</td><td>" + badge + "</td><td>" + time + "</td></tr>"
       );
     })
     .join("");
 }
 
-function escapeHtml(s) {
-  return String(s == null ? "" : s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+// ---------- ADMIN ----------
+function openAdmin() {
+  const modal = document.getElementById("adminModal");
+  modal.classList.add("open");
+  if (!adminAuthed) {
+    document.getElementById("adminBody").innerHTML =
+      '<div class="form-group"><label for="adminPass">Password Admin</label>' +
+      '<input type="password" id="adminPass" placeholder="Masukkan password" /></div>' +
+      '<button class="btn" onclick="adminLogin()">Masuk</button>' +
+      '<div class="message" id="adminMsg" style="display:none;"></div>';
+    return;
+  }
+  renderAdmin();
 }
 
-// Inisialisasi
-loadDashboard();
+function closeAdmin() { document.getElementById("adminModal").classList.remove("open"); }
+
+function adminLogin() {
+  const pass = document.getElementById("adminPass").value;
+  const msg = document.getElementById("adminMsg");
+  if (pass === (window.ADMIN_PASSWORD || "")) {
+    adminAuthed = true;
+    sessionStorage.setItem("vote_admin_auth", "1");
+    renderAdmin();
+  } else {
+    msg.className = "message error";
+    msg.textContent = "Password salah.";
+    msg.style.display = "block";
+  }
+}
+
+function adminMsg(text, type) {
+  document.getElementById("adminBody").innerHTML +=
+    '<div class="message ' + type + '" style="display:block;">' + text + "</div>";
+}
+
+async function renderAdmin() {
+  const body = document.getElementById("adminBody");
+  const client = getSupabase();
+  if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
+
+  const { data } = await client.from("events").select("id,nama,keterangan,aktif").order("created_at", { ascending: false });
+
+  const rows = (data || [])
+    .map(
+      (e) =>
+        '<div class="admin-row">' +
+        '<div class="ar-name">' + escapeHtml(e.nama) +
+        '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' +
+        (e.aktif ? "Aktif" : "Nonaktif") + "</div></div>" +
+        '<div class="ar-actions">' +
+        '<button class="btn btn-sm" onclick="copyLink(\'' + e.id + '\')">🔗 Salin Link</button>' +
+        '<button class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" onclick="toggleEvent(\'' + e.id + '\',' + (e.aktif ? "false" : "true") + ')">' +
+        (e.aktif ? "Nonaktifkan" : "Aktifkan") + "</button>" +
+        '<button class="btn btn-sm btn-danger" onclick="deleteEvent(\'' + e.id + '\',\'' + escapeHtml(e.nama).replace(/'/g, "\\'") + '\')">Hapus</button>' +
+        "</div></div>"
+    )
+    .join("");
+
+  body.innerHTML =
+    '<div class="form-group"><label for="evNama">Nama Event Baru</label>' +
+    '<input type="text" id="evNama" placeholder="Contoh: Gathering Tahunan 2026" /></div>' +
+    '<div class="form-group"><label for="evKet">Keterangan (opsional)</label>' +
+    '<textarea id="evKet" placeholder="Deskripsi singkat kegiatan"></textarea></div>' +
+    '<button class="btn" onclick="createEvent()">Buat Event</button>' +
+    '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Event</h3>' +
+    (rows || '<div class="empty">Belum ada event.</div>') + "</div>";
+}
+
+async function createEvent() {
+  const nama = document.getElementById("evNama").value.trim();
+  const ket = document.getElementById("evKet").value.trim();
+  const client = getSupabase();
+  if (!nama) { adminMsg("Nama event wajib diisi.", "error"); return; }
+  const { error } = await client.from("events").insert({ nama, keterangan: ket });
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  renderAdmin();
+}
+
+function copyLink(id) {
+  const url = location.origin + location.pathname + "#/e/" + id;
+  const done = function () {
+    const b = document.getElementById("adminBody");
+    const d = document.createElement("div");
+    d.className = "message success";
+    d.style.display = "block";
+    d.textContent = "Link disalin: " + url;
+    b.appendChild(d);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done, function () { fallbackCopy(url, done); });
+  } else {
+    fallbackCopy(url, done);
+  }
+}
+
+function fallbackCopy(text, done) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  document.body.removeChild(ta);
+  done();
+}
+
+async function toggleEvent(id, aktif) {
+  const client = getSupabase();
+  const { error } = await client.from("events").update({ aktif }).eq("id", id);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  renderAdmin();
+}
+
+async function deleteEvent(id, nama) {
+  if (!confirm("Hapus event '" + nama + "' beserta semua voting-nya?")) return;
+  const client = getSupabase();
+  const { error } = await client.from("events").delete().eq("id", id);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  renderAdmin();
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ---------- Init ----------
+router();
