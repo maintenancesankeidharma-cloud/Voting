@@ -232,7 +232,7 @@ function openAdmin() {
     document.getElementById("adminBody").innerHTML =
       '<div class="form-group"><label for="adminPass">Password Admin</label>' +
       '<input type="password" id="adminPass" placeholder="Masukkan password" /></div>' +
-      '<button class="btn" onclick="adminLogin()">Masuk</button>' +
+      '<button type="button" class="btn" data-action="adminLogin">Masuk</button>' +
       '<div class="message" id="adminMsg" style="display:none;"></div>';
     return;
   }
@@ -275,10 +275,10 @@ async function renderAdmin() {
         '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' +
         (e.aktif ? "Aktif" : "Nonaktif") + "</div></div>" +
         '<div class="ar-actions">' +
-        '<button class="btn btn-sm" onclick="copyLink(\'' + e.id + '\')">🔗 Salin Link</button>' +
-        '<button class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" onclick="toggleEvent(\'' + e.id + '\',' + (e.aktif ? "false" : "true") + ')">' +
+        '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">🔗 Salin Link</button>' +
+        '<button type="button" class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" data-action="toggleEvent" data-id="' + e.id + '" data-aktif="' + (e.aktif ? "true" : "false") + '">' +
         (e.aktif ? "Nonaktifkan" : "Aktifkan") + "</button>" +
-        '<button class="btn btn-sm btn-danger" onclick="deleteEvent(\'' + e.id + '\',\'' + escapeHtml(e.nama).replace(/'/g, "\\'") + '\')">Hapus</button>' +
+        '<button type="button" class="btn btn-sm btn-danger" data-action="deleteEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '">Hapus</button>' +
         "</div></div>"
     )
     .join("");
@@ -288,7 +288,7 @@ async function renderAdmin() {
     '<input type="text" id="evNama" placeholder="Contoh: Gathering Tahunan 2026" /></div>' +
     '<div class="form-group"><label for="evKet">Keterangan (opsional)</label>' +
     '<textarea id="evKet" placeholder="Deskripsi singkat kegiatan"></textarea></div>' +
-    '<button class="btn" onclick="createEvent()">Buat Event</button>' +
+    '<button type="button" class="btn" data-action="createEvent">Buat Event</button>' +
     '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Event</h3>' +
     (rows || '<div class="empty">Belum ada event.</div>') + "</div>";
 }
@@ -351,6 +351,18 @@ function escapeHtml(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+
+// ---------- Delegated click untuk panel admin ----------
+document.getElementById("adminModal").addEventListener("click", function (ev) {
+  const el = ev.target.closest("[data-action]");
+  if (!el || !el.dataset.action) return;
+  const a = el.dataset.action;
+  if (a === "adminLogin") adminLogin();
+  else if (a === "createEvent") createEvent();
+  else if (a === "copyLink") copyLink(el.dataset.id);
+  else if (a === "toggleEvent") toggleEvent(el.dataset.id, el.dataset.aktif === "true");
+  else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
+});
 
 // ---------- Init ----------
 router();
