@@ -27,7 +27,13 @@ create table if not exists public.responses (
 -- KEBUTUHAN UNTUK TABEL LAMA (yang sudah ada kolomnya)
 -- ============================================================
 alter table public.responses
+  add column if not exists email text,
+  add column if not exists no_wa text,
   add column if not exists event_id uuid references public.events (id) on delete cascade;
+
+-- Hapus kolom 'kontak' lama (sudah diganti email + no_wa)
+alter table public.responses
+  drop column if exists kontak;
 
 -- 3) Aktifkan Row Level Security
 alter table public.events enable row level security;
