@@ -48,6 +48,13 @@ alter table public.responses
 alter table public.responses
   drop column if exists kontak;
 
+-- Penguncian DB: 1 nama hanya bisa mengirim 1 voting per event.
+-- Jalankan hanya jika tidak ada data duplikat. Jika sudah ada duplikat,
+-- bersihkan dulu: delete from public.responses r where r.ctid not in
+-- (select min(ctid) from public.responses group by event_id, nama);
+alter table public.responses
+  add constraint responses_event_nama_unique unique (event_id, nama);
+
 -- 3) Aktifkan Row Level Security
 alter table public.events enable row level security;
 alter table public.responses enable row level security;
