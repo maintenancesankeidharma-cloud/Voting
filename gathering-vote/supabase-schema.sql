@@ -20,6 +20,7 @@ create table if not exists public.responses (
   email text not null,
   no_wa text not null,
   status text not null check (status in ('ya', 'tidak', 'mungkin')),
+  alasan text default '',
   created_at timestamptz not null default now()
 );
 
@@ -29,6 +30,7 @@ create table if not exists public.responses (
 alter table public.responses
   add column if not exists email text,
   add column if not exists no_wa text,
+  add column if not exists alasan text default '',
   add column if not exists event_id uuid references public.events (id) on delete cascade;
 
 -- Hapus kolom 'kontak' lama (sudah diganti email + no_wa)

@@ -189,6 +189,15 @@
     .badge.maybe { background: var(--maybe); }
 
     .dashboard-note { color: var(--muted); font-size: 0.85rem; margin-bottom: 12px; }
+    .voter-summary {
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: #fff;
+      padding: 14px 18px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
     .empty { text-align: center; color: var(--muted); padding: 24px; }
 
     /* EVENT LIST */
@@ -299,6 +308,10 @@
             </div>
           </div>
         </div>
+        <div class="form-group" id="alasanGroup" style="display:none;">
+          <label for="alasan">Alasan Tidak Hadir</label>
+          <textarea id="alasan" placeholder="Tuliskan alasan Anda tidak dapat hadir"></textarea>
+        </div>
         <button type="submit" class="btn" id="submitBtn">Kirim Voting</button>
         <div class="message" id="message"></div>
       </form>
@@ -306,6 +319,7 @@
       <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;" />
 
       <h2>📊 Ringkasan Hasil Voting</h2>
+      <div class="voter-summary" id="voterSummary">0 dari 0 member telah memilih</div>
       <div class="dashboard-note" id="totalText">Memuat...</div>
       <div class="stat-grid">
         <div class="stat yes"><div class="num" id="countYes">–</div><div class="cap">YA, HADIR</div></div>
@@ -321,10 +335,10 @@
       <h2 style="font-size:1rem; border:none; margin-bottom:8px;">📋 Daftar Peserta</h2>
       <table>
         <thead>
-          <tr><th>Nama</th><th>Email</th><th>No. WA</th><th>Status</th><th>Waktu</th></tr>
+          <tr><th>Nama</th><th>Email</th><th>No. WA</th><th>Status</th><th>Alasan</th><th>Waktu</th></tr>
         </thead>
         <tbody id="respTable">
-          <tr><td colspan="5" class="empty">Belum ada respons.</td></tr>
+          <tr><td colspan="6" class="empty">Belum ada respons.</td></tr>
         </tbody>
       </table>
     </div>

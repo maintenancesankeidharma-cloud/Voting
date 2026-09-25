@@ -98,6 +98,7 @@ async function openEvent(id) {
 
   // reset form
   document.getElementById("voteForm").reset();
+  document.getElementById("alasanGroup").style.display = "none";
   document.querySelectorAll(".option").forEach((o) =>
     o.classList.remove("selected-yes", "selected-no", "selected-maybe")
   );
@@ -112,6 +113,7 @@ function selectOption(el) {
   );
   selectedStatus = el.dataset.value;
   el.classList.add(selectedStatus === "ya" ? "selected-yes" : selectedStatus === "tidak" ? "selected-no" : "selected-maybe");
+  document.getElementById("alasanGroup").style.display = selectedStatus === "tidak" ? "block" : "none";
 }
 
 function showMessage(text, type) {
@@ -125,6 +127,7 @@ async function submitVote(event) {
   const nama = document.getElementById("nama").value.trim();
   const email = document.getElementById("email").value.trim();
   const nowa = document.getElementById("nowa").value.trim();
+  const alasan = document.getElementById("alasan").value.trim();
   const btn = document.getElementById("submitBtn");
 
   showMessage("", "success");
@@ -133,6 +136,7 @@ async function submitVote(event) {
   if (!email) return showMessage("Email wajib diisi.", "error");
   if (!nowa) return showMessage("No. WA wajib diisi.", "error");
   if (!selectedStatus) return showMessage("Pilih salah satu status kehadiran.", "error");
+  if (selectedStatus === "tidak" && !alasan) return showMessage("Tuliskan alasan tidak hadir.", "error");
 
   const client = getSupabase();
   if (!client) { showMessage("Supabase belum dikonfigurasi.", "warning"); return; }
@@ -143,10 +147,12 @@ async function submitVote(event) {
     const { error } = await client.from("responses").insert({
       event_id: currentEventId,
       nama, email, no_wa: nowa, status: selectedStatus,
+      alasan: selectedStatus === "tidak" ? alasan : "",
     });
     if (error) throw error;
     showMessage("Voting berhasil dikirim. Terima kasih!", "success");
     document.getElementById("voteForm").reset();
+    document.getElementById("alasanGroup").style.display = "none";
     document.querySelectorAll(".option").forEach((o) =>
       o.classList.remove("selected-yes", "selected-no", "selected-maybe")
     );
@@ -167,20 +173,20 @@ async function loadDashboard() {
 
   if (!client) {
     totalText.textContent = "Supabase belum dikonfigurasi.";
-    body.innerHTML = '<tr><td colspan="5" class="empty">Tidak bisa memuat.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty">Tidak bisa memuat.</td></tr>';
     return;
   }
 
   const { data, error } = await client
     .from("responses")
-    .select("nama,email,no_wa,status,created_at")
+    .select("nama,email,no_wa,status,alasan,created_at")
     .eq("event_id", currentEventId)
     .order("created_at", { ascending: false })
     .limit(200);
 
   if (error) {
     totalText.textContent = "Gagal memuat.";
-    body.innerHTML = '<tr><td colspan="5" class="empty">' + escapeHtml(error.message) + "</td></tr>";
+    body.innerHTML = '<tr><td colspan="6" class="empty">' + escapeHtml(error.message) + "</td></tr>";
     return;
   }
 
@@ -189,6 +195,7 @@ async function loadDashboard() {
   const cNo = rows.filter((r) => r.status === "tidak").length;
   const cMaybe = rows.filter((r) => r.status === "mungkin").length;
   const total = rows.length;
+  const totalMembers = Number(window.TOTAL_MEMBERS) || 0;
 
   document.getElementById("countYes").textContent = cYes;
   document.getElementById("countNo").textContent = cNo;
@@ -202,10 +209,18 @@ async function loadDashboard() {
   document.getElementById("barNo").style.width = pct(cNo) + "%";
   document.getElementById("barMaybe").style.width = pct(cMaybe) + "%";
 
+  const summary = document.getElementById("voterSummary");
+  if (totalMembers > 0) {
+    const pctVoted = Math.round((total / totalMembers) * 100);
+    summary.textContent = total + " dari " + totalMembers + " member telah memilih (" + pctVoted + "%)";
+  } else {
+    summary.textContent = total + " member telah memilih";
+  }
+
   totalText.textContent = total + " peserta terdaftar.";
 
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="5" class="empty">Belum ada respons.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="empty">Belum ada respons.</td></tr>';
     return;
   }
 
@@ -216,9 +231,11 @@ async function loadDashboard() {
       const time = r.created_at
         ? new Date(r.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
         : "–";
+      const alasanCell = st === "tidak" && r.alasan ? escapeHtml(r.alasan) : "–";
       return (
         "<tr><td>" + escapeHtml(r.nama) + "</td><td>" + escapeHtml(r.email) +
-        "</td><td>" + escapeHtml(r.no_wa) + "</td><td>" + badge + "</td><td>" + time + "</td></tr>"
+        "</td><td>" + escapeHtml(r.no_wa) + "</td><td>" + badge + "</td><td>" + alasanCell +
+        "</td><td>" + time + "</td></tr>"
       );
     })
     .join("");

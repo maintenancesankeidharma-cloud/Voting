@@ -12,3 +12,10 @@ window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXB
 // Ganti sesuai keinginan Anda.
 // ============================================================
 window.ADMIN_PASSWORD = "Sankei2025";
+
+// ============================================================
+// JUMLAH TOTAL MEMBER
+// Isi dengan jumlah total member/karyawan yang berhak memilih.
+// Dashboard akan menampilkan: "X dari Y member telah memilih".
+// ============================================================
+window.TOTAL_MEMBERS = 0;
