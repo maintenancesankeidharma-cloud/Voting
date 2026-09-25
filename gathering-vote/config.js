@@ -18,4 +18,4 @@ window.ADMIN_PASSWORD = "Sankei2025";
 // Isi dengan jumlah total member/karyawan yang berhak memilih.
 // Dashboard akan menampilkan: "X dari Y member telah memilih".
 // ============================================================
-window.TOTAL_MEMBERS = 0;
+window.TOTAL_MEMBERS = 22;
