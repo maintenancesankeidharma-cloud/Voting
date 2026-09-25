@@ -283,7 +283,7 @@ async function loadVilla() {
 
   grid.innerHTML = rows.map((v) =>
     '<div class="villa-card">' +
-    (v.foto_url ? '<img src="' + escapeHtml(v.foto_url) + '" alt="' + escapeHtml(v.nama) + '" onerror="this.style.display=\'none\'" />' : '<img style="display:none;" />') +
+    (v.foto_url ? '<img src="' + escapeHtml(v.foto_url) + '" alt="' + escapeHtml(v.nama) + '" onerror="this.outerHTML=\'<div class=\\\"vc-noimg\\\">Gambar tidak tersedia</div>\'" />' : '<div class="vc-noimg">Tanpa gambar</div>') +
     '<div class="vc-body">' +
     '<div class="vc-name">' + escapeHtml(v.nama) + "</div>" +
     (v.fasilitas ? '<div class="vc-fas">' + escapeHtml(v.fasilitas) + "</div>" : "") +
