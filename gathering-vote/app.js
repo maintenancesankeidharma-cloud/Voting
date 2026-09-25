@@ -143,6 +143,18 @@ async function submitVote(event) {
   btn.disabled = true;
   btn.textContent = "Mengirim...";
   try {
+    const { count: existing, error: dupErr } = await client
+      .from("responses")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", currentEventId)
+      .eq("nama", nama);
+    if (dupErr) throw dupErr;
+    if (existing > 0) {
+      btn.disabled = false;
+      btn.textContent = "Kirim Voting";
+      return showMessage("Nama ini sudah pernah mengirim voting untuk event ini.", "error");
+    }
+
     const { error } = await client.from("responses").insert({
       event_id: currentEventId,
       nama, email, no_wa: nowa, status: selectedStatus,
@@ -406,9 +418,11 @@ async function deleteEvent(id, nama) {
 
 // ---------- ADMIN: KELOLA VILLA (penginapan) ----------
 let currentAdminEventId = null;
+let currentVillaId = null;
 
 async function manageVilla(eventId) {
   currentAdminEventId = eventId;
+  currentVillaId = null;
   const body = document.getElementById("adminBody");
   const client = getSupabase();
   if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
@@ -421,21 +435,37 @@ async function manageVilla(eventId) {
     '<div class="ar-name">' + escapeHtml(v.nama) +
     (v.harga ? '<div style="font-size:0.75rem;color:var(--primary);font-weight:600;">' + escapeHtml(v.harga) + "</div>" : "") +
     "</div>" +
-    '<div class="ar-actions"><button type="button" class="btn btn-sm btn-danger" data-action="deleteVilla" data-id="' + v.id + '">Hapus</button></div>' +
-    "</div>"
+    '<div class="ar-actions">' +
+    '<button type="button" class="btn btn-sm" data-action="editVilla" data-id="' + v.id + '">Edit</button>' +
+    '<button type="button" class="btn btn-sm btn-danger" data-action="deleteVilla" data-id="' + v.id + '">Hapus</button>' +
+    "</div></div>"
   ).join("");
 
   body.innerHTML =
     '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
     '<h2 style="font-size:1.1rem;margin-bottom:4px;">🏠 Penginapan: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
-    '<div class="dashboard-note">Tambah katalog villa untuk event ini.</div>' +
+    '<div class="dashboard-note" id="villaFormNote">Tambah katalog villa untuk event ini.</div>' +
     '<div class="form-group"><label for="vNama">Nama Villa</label><input type="text" id="vNama" placeholder="Contoh: Villa Melati" /></div>' +
     '<div class="form-group"><label for="vFoto">URL Foto</label><input type="text" id="vFoto" placeholder="https://gambar.example.com/villa.jpg" /></div>' +
     '<div class="form-group"><label for="vFas">Fasilitas (pisahkan dengan baris baru)</label><textarea id="vFas" placeholder="Kapasitas 10 orang&#10;Kolam renang&#10;Dapur lengkap"></textarea></div>' +
     '<div class="form-group"><label for="vHarga">Harga</label><input type="text" id="vHarga" placeholder="Rp 1.500.000 / malam" /></div>' +
-    '<button type="button" class="btn" data-action="addVilla">Simpan Villa</button>' +
+    '<button type="button" class="btn" id="villaSubmitBtn" data-action="addVilla">Simpan Villa</button>' +
     '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Villa</h3>' +
     (rows || '<div class="empty">Belum ada villa.</div>') + "</div>";
+}
+
+async function editVilla(id) {
+  const client = getSupabase();
+  const { data, error } = await client.from("villa").select("id,nama,foto_url,fasilitas,harga").eq("id", id).single();
+  if (error || !data) { adminMsg("Gagal memuat villa.", "error"); return; }
+  currentVillaId = data.id;
+  document.getElementById("vNama").value = data.nama || "";
+  document.getElementById("vFoto").value = data.foto_url || "";
+  document.getElementById("vFas").value = data.fasilitas || "";
+  document.getElementById("vHarga").value = data.harga || "";
+  const note = document.getElementById("villaFormNote");
+  note.textContent = "Mengedit: " + data.nama;
+  document.getElementById("villaSubmitBtn").textContent = "Update Villa";
 }
 
 async function addVilla() {
@@ -445,8 +475,13 @@ async function addVilla() {
   const harga = document.getElementById("vHarga").value.trim();
   if (!nama) { adminMsg("Nama villa wajib diisi.", "error"); return; }
   const client = getSupabase();
-  const { error } = await client.from("villa").insert({ event_id: currentAdminEventId, nama, foto_url: foto, fasilitas: fas, harga });
-  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  if (currentVillaId) {
+    const { error } = await client.from("villa").update({ nama, foto_url: foto, fasilitas: fas, harga }).eq("id", currentVillaId);
+    if (error) { adminMsg("Gagal update: " + error.message, "error"); return; }
+  } else {
+    const { error } = await client.from("villa").insert({ event_id: currentAdminEventId, nama, foto_url: foto, fasilitas: fas, harga });
+    if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  }
   manageVilla(currentAdminEventId);
 }
 
@@ -475,6 +510,7 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
   else if (a === "manageVilla") manageVilla(el.dataset.id);
   else if (a === "addVilla") addVilla();
+  else if (a === "editVilla") editVilla(el.dataset.id);
   else if (a === "deleteVilla") deleteVilla(el.dataset.id);
   else if (a === "backEvents") renderAdmin();
 });
