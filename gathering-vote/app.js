@@ -66,7 +66,7 @@ async function renderHome() {
         '<div class="event-card" onclick="location.hash=\'#/e/' + e.id + '\'">' +
         '<div class="ec-body"><div class="ec-name">' + escapeHtml(e.nama) + "</div>" +
         (e.keterangan ? '<div class="ec-desc">' + escapeHtml(e.keterangan) + "</div>" : "") +
-        "</div><div class='ec-arrow'>›</div></div>"
+        "</div><div class='ec-arrow'>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âº</div></div>"
     )
     .join("");
 }
@@ -238,13 +238,13 @@ async function loadDashboard() {
   body.innerHTML = rows
     .map((r) => {
       const st = r.status || "mungkin";
-      const symbols = { ya: "✅", tidak: "❌", mungkin: "🤔" };
+      const symbols = { ya: "ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦", tidak: "ÃƒÂ¢Ã‚ÂÃ…â€™", mungkin: "ÃƒÂ°Ã…Â¸Ã‚Â¤Ã¢â‚¬Â" };
       const symbol = symbols[st] || st;
       const badge = '<span class="badge ' + st + '">' + symbol + "</span>";
       const time = r.created_at
         ? new Date(r.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
-        : "–";
-      const alasanCell = st === "tidak" && r.alasan ? escapeHtml(r.alasan) : "–";
+        : "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“";
+      const alasanCell = st === "tidak" && r.alasan ? escapeHtml(r.alasan) : "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“";
       return (
         "<tr><td>" + escapeHtml(r.nama) + "</td><td>" + escapeHtml(r.email) +
         "</td><td>" + escapeHtml(r.no_wa) + "</td><td>" + badge + "</td><td>" + alasanCell +
@@ -330,6 +330,7 @@ function adminMsg(text, type) {
 
 async function renderAdmin() {
   const body = document.getElementById("adminBody");
+  currentEditEventId = null;
   const client = getSupabase();
   if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
 
@@ -343,8 +344,9 @@ async function renderAdmin() {
         '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' +
         (e.aktif ? "Aktif" : "Nonaktif") + "</div></div>" +
         '<div class="ar-actions">' +
-        '<button type="button" class="btn btn-sm" data-action="manageVilla" data-id="' + e.id + '">🏠 Penginapan</button>' +
-        '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">🔗 Salin Link</button>' +
+        '<button type="button" class="btn btn-sm" data-action="editEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '" data-ket="' + escapeHtml(e.keterangan || "") + '">Edit</button>' +
+        '<button type="button" class="btn btn-sm" data-action="manageVilla" data-id="' + e.id + '">Penginapan</button>' +
+        '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">Salin Link</button>' +
         '<button type="button" class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" data-action="toggleEvent" data-id="' + e.id + '" data-aktif="' + (e.aktif ? "true" : "false") + '">' +
         (e.aktif ? "Nonaktifkan" : "Aktifkan") + "</button>" +
         '<button type="button" class="btn btn-sm btn-danger" data-action="deleteEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '">Hapus</button>' +
@@ -353,13 +355,22 @@ async function renderAdmin() {
     .join("");
 
   body.innerHTML =
-    '<div class="form-group"><label for="evNama">Nama Event Baru</label>' +
+    '<div class="dashboard-note" id="evFormNote">Buat event baru.</div>' +
+    '<div class="form-group"><label for="evNama">Nama Event</label>' +
     '<input type="text" id="evNama" placeholder="Contoh: Gathering Tahunan 2026" /></div>' +
     '<div class="form-group"><label for="evKet">Keterangan (opsional)</label>' +
     '<textarea id="evKet" placeholder="Deskripsi singkat kegiatan"></textarea></div>' +
-    '<button type="button" class="btn" data-action="createEvent">Buat Event</button>' +
+    '<button type="button" class="btn" id="evSubmitBtn" data-action="createEvent">Buat Event</button>' +
     '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Event</h3>' +
     (rows || '<div class="empty">Belum ada event.</div>') + "</div>";
+}
+
+function editEvent(id, nama, ket) {
+  currentEditEventId = id;
+  document.getElementById("evNama").value = nama;
+  document.getElementById("evKet").value = ket || "";
+  document.getElementById("evFormNote").textContent = "Mengedit: " + nama + ". Klik 'Update Event' untuk menyimpan.";
+  document.getElementById("evSubmitBtn").textContent = "Update Event";
 }
 
 async function createEvent() {
@@ -367,8 +378,13 @@ async function createEvent() {
   const ket = document.getElementById("evKet").value.trim();
   const client = getSupabase();
   if (!nama) { adminMsg("Nama event wajib diisi.", "error"); return; }
-  const { error } = await client.from("events").insert({ nama, keterangan: ket });
-  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  if (currentEditEventId) {
+    const { error } = await client.from("events").update({ nama, keterangan: ket }).eq("id", currentEditEventId);
+    if (error) { adminMsg("Gagal update: " + error.message, "error"); return; }
+  } else {
+    const { error } = await client.from("events").insert({ nama, keterangan: ket });
+    if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  }
   renderAdmin();
 }
 
@@ -419,6 +435,7 @@ async function deleteEvent(id, nama) {
 // ---------- ADMIN: KELOLA VILLA (penginapan) ----------
 let currentAdminEventId = null;
 let currentVillaId = null;
+let currentEditEventId = null;
 
 async function manageVilla(eventId) {
   currentAdminEventId = eventId;
@@ -442,8 +459,8 @@ async function manageVilla(eventId) {
   ).join("");
 
   body.innerHTML =
-    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
-    '<h2 style="font-size:1.1rem;margin-bottom:4px;">🏠 Penginapan: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
+    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Kembali ke Event</button>' +
+    '<h2 style="font-size:1.1rem;margin-bottom:4px;">ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â  Penginapan: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
     '<div class="dashboard-note" id="villaFormNote">Tambah katalog villa untuk event ini.</div>' +
     '<div class="form-group"><label for="vNama">Nama Villa</label><input type="text" id="vNama" placeholder="Contoh: Villa Melati" /></div>' +
     '<div class="form-group"><label for="vFoto">URL Foto</label><input type="text" id="vFoto" placeholder="https://gambar.example.com/villa.jpg" /></div>' +
@@ -509,6 +526,7 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   const a = el.dataset.action;
   if (a === "adminLogin") adminLogin();
   else if (a === "createEvent") createEvent();
+  else if (a === "editEvent") editEvent(el.dataset.id, el.dataset.nama, el.dataset.ket);
   else if (a === "copyLink") copyLink(el.dataset.id);
   else if (a === "toggleEvent") toggleEvent(el.dataset.id, el.dataset.aktif === "true");
   else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
