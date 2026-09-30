@@ -236,6 +236,9 @@
     }
     .empty { text-align: center; color: var(--muted); padding: 24px; }
 
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-wrap table { min-width: 560px; }
+
     /* EVENT LIST */
     .event-list { display: grid; grid-template-columns: 1fr; gap: 14px; }
     .event-card {
@@ -285,9 +288,21 @@
 
     @media (max-width: 600px) {
       .options { grid-template-columns: 1fr; }
-      .stat-grid { grid-template-columns: repeat(3, 1fr); }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
       .bar-row .b-cap { width: 70px; }
       .bar-row .b-pct { width: 55px; }
+      .villa-grid { grid-template-columns: 1fr; }
+      .admin-row { flex-wrap: wrap; }
+      .admin-row .ar-actions { flex-wrap: wrap; }
+      header h1 { font-size: 1.35rem; }
+      .card { padding: 18px; }
+    }
+
+    @media (max-width: 400px) {
+      .stat-grid { grid-template-columns: 1fr; }
+      .modal-card { padding: 18px; }
+      .voter-summary { font-size: 0.9rem; }
+      .tab { font-size: 0.85rem; padding: 10px; }
     }
   </style>
 </head>
@@ -371,6 +386,7 @@
       </div>
 
       <h2 style="font-size:1rem; border:none; margin-bottom:8px;">📋 Daftar Peserta</h2>
+      <div class="table-wrap">
       <table>
         <thead>
           <tr><th>Nama</th><th>Email</th><th>No. WA</th><th>Status</th><th>Alasan</th><th>Waktu</th></tr>
@@ -379,6 +395,7 @@
           <tr><td colspan="6" class="empty">Belum ada respons.</td></tr>
         </tbody>
       </table>
+      </div>
       </div><!-- /panelVote -->
 
       <!-- TAB PENGINAPAN -->
