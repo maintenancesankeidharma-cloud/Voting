@@ -66,7 +66,7 @@ async function renderHome() {
         '<div class="event-card" onclick="location.hash=\'#/e/' + e.id + '\'">' +
         '<div class="ec-body"><div class="ec-name">' + escapeHtml(e.nama) + "</div>" +
         (e.keterangan ? '<div class="ec-desc">' + escapeHtml(e.keterangan) + "</div>" : "") +
-        "</div><div class='ec-arrow'>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âº</div></div>"
+        "</div><div class='ec-arrow'>›</div></div>"
     )
     .join("");
 }
@@ -238,13 +238,13 @@ async function loadDashboard() {
   body.innerHTML = rows
     .map((r) => {
       const st = r.status || "mungkin";
-      const symbols = { ya: "ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦", tidak: "ÃƒÂ¢Ã‚ÂÃ…â€™", mungkin: "ÃƒÂ°Ã…Â¸Ã‚Â¤Ã¢â‚¬Â" };
+      const symbols = { ya: "✅", tidak: "❌", mungkin: "🤔" };
       const symbol = symbols[st] || st;
       const badge = '<span class="badge ' + st + '">' + symbol + "</span>";
       const time = r.created_at
         ? new Date(r.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
-        : "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“";
-      const alasanCell = st === "tidak" && r.alasan ? escapeHtml(r.alasan) : "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“";
+        : "–";
+      const alasanCell = st === "tidak" && r.alasan ? escapeHtml(r.alasan) : "–";
       return (
         "<tr><td>" + escapeHtml(r.nama) + "</td><td>" + escapeHtml(r.email) +
         "</td><td>" + escapeHtml(r.no_wa) + "</td><td>" + badge + "</td><td>" + alasanCell +
@@ -459,8 +459,8 @@ async function manageVilla(eventId) {
   ).join("");
 
   body.innerHTML =
-    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Kembali ke Event</button>' +
-    '<h2 style="font-size:1.1rem;margin-bottom:4px;">ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â  Penginapan: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
+    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
+    '<h2 style="font-size:1.1rem;margin-bottom:4px;">🏠  Penginapan: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
     '<div class="dashboard-note" id="villaFormNote">Tambah katalog villa untuk event ini.</div>' +
     '<div class="form-group"><label for="vNama">Nama Villa</label><input type="text" id="vNama" placeholder="Contoh: Villa Melati" /></div>' +
     '<div class="form-group"><label for="vFoto">URL Foto</label><input type="text" id="vFoto" placeholder="https://gambar.example.com/villa.jpg" /></div>' +
