@@ -3,7 +3,7 @@ let selectedStatus = null;
 let currentEventId = null;
 let adminAuthed = sessionStorage.getItem("vote_admin_auth") === "1";
 
-const STATUS_LABEL = { ya: "Ya, Hadir", tidak: "Tidak Hadir", mungkin: "Mungkin" };
+const STATUS_LABEL = { ya: "Ya, Hadir", tidak: "Tidak Hadir" };
 
 // ---------- Supabase ----------
 function getSupabase() {
@@ -204,21 +204,17 @@ async function loadDashboard() {
   const rows = data || [];
   const cYes = rows.filter((r) => r.status === "ya").length;
   const cNo = rows.filter((r) => r.status === "tidak").length;
-  const cMaybe = rows.filter((r) => r.status === "mungkin").length;
   const total = rows.length;
   const totalMembers = Number(window.TOTAL_MEMBERS) || 0;
 
   document.getElementById("countYes").textContent = cYes;
   document.getElementById("countNo").textContent = cNo;
-  document.getElementById("countMaybe").textContent = cMaybe;
 
   const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
   document.getElementById("pctYes").textContent = pct(cYes) + "%";
   document.getElementById("pctNo").textContent = pct(cNo) + "%";
-  document.getElementById("pctMaybe").textContent = pct(cMaybe) + "%";
   document.getElementById("barYes").style.width = pct(cYes) + "%";
   document.getElementById("barNo").style.width = pct(cNo) + "%";
-  document.getElementById("barMaybe").style.width = pct(cMaybe) + "%";
 
   const summary = document.getElementById("voterSummary");
   if (totalMembers > 0) {
@@ -237,9 +233,9 @@ async function loadDashboard() {
 
   body.innerHTML = rows
     .map((r) => {
-      const st = r.status || "mungkin";
+      const st = r.status || "tidak";
       const symbols = { ya: "✅", tidak: "❌", mungkin: "🤔" };
-      const symbol = symbols[st] || st;
+      const symbol = symbols[st] || (STATUS_LABEL[st] || st);
       const badge = '<span class="badge ' + st + '">' + symbol + "</span>";
       const time = r.created_at
         ? new Date(r.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })

@@ -150,7 +150,7 @@
     }
     .form-group textarea { resize: vertical; min-height: 70px; }
 
-    .options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
     .option {
       border: 2px solid var(--border);
       border-radius: 12px;
@@ -346,9 +346,6 @@
             <div class="option" data-value="tidak" onclick="selectOption(this)">
               <span class="emoji">❌</span><span class="label">Tidak Hadir</span>
             </div>
-            <div class="option" data-value="mungkin" onclick="selectOption(this)">
-              <span class="emoji">🤔</span><span class="label">Mungkin</span>
-            </div>
           </div>
         </div>
         <div class="form-group" id="alasanGroup" style="display:none;">
@@ -367,12 +364,10 @@
       <div class="stat-grid">
         <div class="stat yes"><div class="num" id="countYes">–</div><div class="cap">YA, HADIR</div></div>
         <div class="stat no"><div class="num" id="countNo">–</div><div class="cap">TIDAK HADIR</div></div>
-        <div class="stat maybe"><div class="num" id="countMaybe">–</div><div class="cap">MUNGKIN</div></div>
       </div>
       <div style="margin-bottom: 24px;">
         <div class="bar-row"><div class="b-cap">✅ Ya</div><div class="bar-track"><div class="bar-fill fill-yes" id="barYes" style="width:0%"></div></div><div class="b-pct" id="pctYes">0%</div></div>
         <div class="bar-row"><div class="b-cap">❌ Tidak</div><div class="bar-track"><div class="bar-fill fill-no" id="barNo" style="width:0%"></div></div><div class="b-pct" id="pctNo">0%</div></div>
-        <div class="bar-row"><div class="b-cap">🤔 Mungkin</div><div class="bar-track"><div class="bar-fill fill-maybe" id="barMaybe" style="width:0%"></div></div><div class="b-pct" id="pctMaybe">0%</div></div>
       </div>
 
       <h2 style="font-size:1rem; border:none; margin-bottom:8px;">📋 Daftar Peserta</h2>
