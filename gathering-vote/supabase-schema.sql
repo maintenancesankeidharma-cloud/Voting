@@ -14,6 +14,7 @@ create table if not exists public.events (
 );
 
 -- 2) Tabel responses (dengan event_id)
+)
 create table if not exists public.responses (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references public.events (id) on delete cascade,
@@ -25,7 +26,8 @@ create table if not exists public.responses (
   created_at timestamptz not null default now()
 );
 
--- 3) Tabel villa (katalog penginapan per event)
+-- 3) Tabel villa(katalog penginapan per event)
+)
 create table if not exists public.villa (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references public.events (id) on delete cascade,
@@ -37,7 +39,7 @@ create table if not exists public.villa (
 );
 
 -- 4) Tabel voting gambar (peserta upload lalu di-vote)
-
+)
 create table if not exists public.gambar_uploads (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references public.events (id) on delete cascade,
@@ -58,8 +60,19 @@ create table if not exists public.gambar_votes (
 alter table public.gambar_uploads enable row level security;
 alter table public.gambar_votes enable row level security;
 
-alter table public.gambar_votes add constraint gambar_votes_event_nama_unique unique(event_id, nama);
-alter table public.gambar_uploads add constraint gambar_uploads_event_nama_unique unique(event_id, nama);
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'gambar_votes_event_nama_unique') then
+    alter table public.gambar_votes add constraint gambar_votes_event_nama_unique unique(event_id, nama;
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'gambar_uploads_event_nama_unique') then
+    alter table public.gambar_uploads add constraint gambar_uploads_event_nama_unique unique(event_id, nama;
+  end if;
+end $$;
 
 -- Bucket storage publik untuk gambar
 insert into storage.buckets(id, name, public)values('gambar', 'gambar', true)on conflict(id)do update set public=true;
@@ -85,11 +98,13 @@ alter table public.responses
   drop column if exists kontak;
 
 -- Penguncian DB: 1 nama hanya bisa mengirim 1 voting per event.
--- Jalankan hanya jika tidak ada data duplikat. Jika sudah ada duplikat,
--- bersihkan dulu: delete from public.responses r where r.ctid not in
--- (select min(ctid) from public.responses group by event_id, nama);
-alter table public.responses
-  add constraint responses_event_nama_unique unique (event_id, nama);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'responses_event_nama_unique') then
+    alter table public.responses add constraint responses_event_nama_unique unique(event_id, nama;
+  end if;
+end $$;
 
 -- 3) Aktifkan Row Level Security
 alter table public.events enable row level security;
@@ -101,41 +116,42 @@ alter table public.villa enable row level security;
 --    namun API tetap terbuka (anon key). Untuk penggunaan internal
 --    sederhana ini dianggap cukup. Untuk keamanan ketat, ganti
 --    dengan service_role + admin token di server.
+
 do $$
 begin
-  if not exists (select 1 from pg_policies where tablename = 'events' and policyname = 'allow public select') then
+  if not exists (select 1 from pg_policies where tablename = 'events'and policyname = 'allow public select') then
     create policy "allow public select" on public.events for select using (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'events' and policyname = 'allow public insert') then
+  if not exists (select 1 from pg_policies where tablename = 'events'and policyname = 'allow public insert') then
     create policy "allow public insert" on public.events for insert with check (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'events' and policyname = 'allow public update') then
+  if not exists (select 1 from pg_policies where tablename = 'events'and policyname = 'allow public update') then
     create policy "allow public update" on public.events for update using (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'events' and policyname = 'allow public delete') then
+  if not exists (select 1 from pg_policies where tablename = 'events'and policyname = 'allow public delete') then
     create policy "allow public delete" on public.events for delete using (true);
   end if;
 
-  if not exists (select 1 from pg_policies where tablename = 'responses' and policyname = 'allow public select') then
+  if not exists (select 1 from pg_policies where tablename = 'responses'and policyname = 'allow public select') then
     create policy "allow public select" on public.responses for select using (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'responses' and policyname = 'allow public insert') then
+  if not exists (select 1 from pg_policies where tablename = 'responses'and policyname = 'allow public insert') then
     create policy "allow public insert" on public.responses for insert with check (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'responses' and policyname = 'allow public delete') then
+  if not exists (select 1 from pg_policies where tablename = 'responses'and policyname = 'allow public delete') then
     create policy "allow public delete" on public.responses for delete using (true);
   end if;
 
-  if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public select') then
+  if not exists (select 1 from pg_policies where tablename = 'villa'and policyname = 'allow public select') then
     create policy "allow public select" on public.villa for select using (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public insert') then
+  if not exists (select 1 from pg_policies where tablename = 'villa'and policyname = 'allow public insert') then
     create policy "allow public insert" on public.villa for insert with check (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public update') then
+  if not exists (select 1 from pg_policies where tablename = 'villa'and policyname = 'allow public update') then
     create policy "allow public update" on public.villa for update using (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public delete') then
+  if not exists (select 1 from pg_policies where tablename = 'villa'and policyname = 'allow public delete') then
     create policy "allow public delete" on public.villa for delete using (true);
   end if;
 
