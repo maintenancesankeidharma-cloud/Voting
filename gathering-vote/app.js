@@ -1,6 +1,7 @@
 let sbClient = null;
 let selectedStatus = null;
 let currentEventId = null;
+let currentEventMode = "kehadiran";
 let adminAuthed = sessionStorage.getItem("vote_admin_auth") === "1";
 
 const STATUS_LABEL = { ya: "Ya, Hadir", tidak: "Tidak Hadir" };
@@ -83,7 +84,7 @@ async function openEvent(id) {
 
   const { data, error } = await client
     .from("events")
-    .select("id,nama,keterangan,aktif")
+    .select("id,nama,keterangan,aktif,mode")
     .eq("id", id)
     .single();
 
@@ -96,14 +97,28 @@ async function openEvent(id) {
   document.getElementById("evTitle").textContent = data.nama;
   document.getElementById("evDesc").textContent = data.keterangan || "";
 
+  currentEventMode = data.mode === "gambar" ? "gambar" : "kehadiran";
+
   // reset form
   document.getElementById("voteForm").reset();
   document.getElementById("alasanGroup").style.display = "none";
   document.querySelectorAll(".option").forEach((o) =>
     o.classList.remove("selected-yes", "selected-no", "selected-maybe")
   );
+  document.getElementById("gambarUploadForm").reset();
+  document.getElementById("gambarMsg").textContent = "";
+
+  const isGambar = currentEventMode === "gambar";
+  document.getElementById("formKehadiran").style.display = isGambar ? "none" : "block";
+  document.getElementById("dashKehadiran").style.display = isGambar ? "none" : "block";
+  document.getElementById("gambarPanel").style.display =isGambar ? "block" : "none";
+
   switchTab("vote");
-  loadDashboard();
+  if (isGambar) {
+    loadGambar();
+  } else {
+    loadDashboard();
+  }
 }
 
 function selectOption(el) {
@@ -288,6 +303,121 @@ async function loadVilla() {
   ).join("");
 }
 
+// ---------- VOTING GAMBAR ----------
+function gambarPublicUrl(path) {
+  return window.SUPABASE_URL + "/storage/v1/object/public/gambar/" + encodeURIComponent(path);
+}
+
+async function submitGambarUpload(event) {
+  if (event) event.preventDefault();
+  const nama = document.getElementById("gNama").value.trim();
+  const noWa = document.getElementById("gNoWa").value.trim();
+  const file = document.getElementById("gFile").files[0];
+  const msg = document.getElementById("gambarMsg");
+  const btn = document.getElementById("gUploadBtn");
+
+  msg.textContent = "";
+  if (!nama) { msg.textContent = "Nama wajib diisi."; return; }
+  if (!noWa) { msg.textContent = "No. WA wajib diisi."; return; }
+  if (!file) { msg.textContent = "Pilih file gambar."; return; }
+  if (!file.type.match(/image/)) { msg.textContent = "File harus berupa gambar."; return; }
+
+  const client = getSupabase();
+  if (!client) { msg.textContent = "Supabase belum dikonfigurasi."; return; }
+
+  btn.disabled = true;
+  btn.textContent = "Mengupload...";
+  try {
+    const { count: dup } = await client
+      .from("gambar_uploads").select("id", { count: "exact", head: true })
+      .eq("event_id", currentEventId).eq("nama", nama);
+    if (dup > 0) { msg.textContent = "Nama ini sudah pernah mengupload gambar untuk event ini."; btn.disabled = false; btn.textContent = "Upload Gambar"; return; }
+
+    const path = currentEventId + "/" + Date.now() + "-" + file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const { error: upErr } = await client.storage.from("gambar").upload(path, file, { upsert: false });
+    if (upErr) throw upErr;
+
+    const { error } = await client.from("gambar_uploads").insert({ event_id: currentEventId, nama, no_wa: noWa, foto_path: path });
+    if (error) throw error;
+    msg.textContent = "Gambar berhasil diupload!";
+    document.getElementById("gambarUploadForm").reset();
+    loadGambar();
+  } catch (err) {
+    msg.textContent = "Gagal upload: " + (err.message || err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Upload Gambar";
+  }
+}
+
+async function loadGambar() {
+  const client = getSupabase();
+  const gal = document.getElementById("gGallery");
+  const note = document.getElementById("gNote");
+  const sum = document.getElementById("gvoterSummary");
+
+  if (!client) { note.textContent = "Supabase belum dikonfigurasi."; return; }
+
+  const [uploadsRes, votesRes] = await Promise.all([
+    client.from("gambar_uploads").select("id,nama,foto_path").eq("event_id", currentEventId).order("created_at", { ascending: true }),
+    client.from("gambar_votes").select("id,upload_id,nama").eq("event_id", currentEventId),
+  ]);
+
+  if (uploadsRes.error) { note.textContent = "Gagal: " + uploadsRes.error.message; return; }
+
+  const uploads = uploadsRes.data || [];
+  const votes = (votesRes.data || []);
+  const countMap = {};
+  votes.forEach((v) => { countMap[v.upload_id] = (countMap[v.upload_id] || 0) + 1; });
+
+  const totalMembers = Number(window.TOTAL_MEMBERS) || 0;
+  const votedNames = new Set(votes.map((v) => v.nama.toLowerCase()));
+  sum.textContent = totalMembers > 0
+    ? votes.length + " dari " + totalMembers + " member telah memilih (" + Math.round((votes.length / totalMembers) * 100) + "%)"
+    : votes.length + " member telah memilih";
+
+  note.textContent = uploads.length ? uploads.length + " gambar terupload." : "Belum ada gambar. Upload gambar pertama di atas.";
+
+  if (!uploads.length) { gal.innerHTML = '<div class="empty">Belum ada gambar.</div>'; return; }
+
+  const myVoteName = (document.getElementById("gVoteNama").value || "").trim().toLowerCase();
+
+  gal.innerHTML = uploads.map((u) => {
+    const cnt = countMap[u.id] || 0;
+    const isOwn = u.nama.toLowerCase() === myVoteName;
+    const alreadyVoted = myVoteName && votedNames.has(myVoteName);
+    const btnDisabled = !myVoteName || isOwn || alreadyVoted;
+    return (
+      '<div class="g-card">' +
+      '<img src="' + escapeHtml(gambarPublicUrl(u.foto_path)) + '" alt="' + escapeHtml(u.nama) + '" onerror="villaImgError(this)" />' +
+      '<div class="gc-body">' +
+      '<div class="gc-nama">' + escapeHtml(u.nama) + "</div>" +
+      '<div class="gc-count">' + cnt + " suara" + (isOwn ? " (milik Anda)" : "") + "</div>" +
+      '<button type="button" class="gc-vote" data-upload-id="' + u.id + '" data-upload-nama="' + escapeHtml(u.nama) + '"' + (btnDisabled ? " disabled" : "") + '>Vote</button>' +
+      "</div></div>"
+    );
+  }).join("");
+}
+
+async function voteGambar(uploadId, uploadNama) {
+  const nama = (document.getElementById("gVoteNama").value || "").trim();
+  if (!nama) { alert("Isi nama Anda untuk vote."); return; }
+  if (nama.toLowerCase() === String(uploadNama).toLowerCase()) { alert("Tidak bisa vote gambar milik sendiri."); return; }
+
+  const client = getSupabase();
+  if (!client) return;
+
+  const { count: dup } = await client
+    .from("gambar_votes").select("id", { count: "exact", head: true })
+    .eq("event_id", currentEventId).eq("nama", nama);
+  if (dup > 0) { alert("Nama ini sudah pernah vote di event ini."); return; }
+
+  const { error } = await client.from("gambar_votes").insert({ event_id: currentEventId, upload_id: uploadId, nama });
+  if (error) { alert("Gagal vote: " + (error.message || error)); return; }
+  alert("Vote berhasil!");
+  loadGambar();
+}
+
 // ---------- ADMIN ----------
 function openAdmin() {
   const modal = document.getElementById("adminModal");
@@ -330,7 +460,7 @@ async function renderAdmin() {
   const client = getSupabase();
   if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
 
-  const { data } = await client.from("events").select("id,nama,keterangan,aktif").order("created_at", { ascending: false });
+  const { data } = await client.from("events").select("id,nama,keterangan,aktif,mode").order("created_at", { ascending: false });
 
   const rows = (data || [])
     .map(
@@ -338,9 +468,10 @@ async function renderAdmin() {
         '<div class="admin-row">' +
         '<div class="ar-name">' + escapeHtml(e.nama) +
         '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' +
+        (e.mode === "gambar" ? "Voting Gambar" : "Voting Kehadiran") + " &bull; " +
         (e.aktif ? "Aktif" : "Nonaktif") + "</div></div>" +
         '<div class="ar-actions">' +
-        '<button type="button" class="btn btn-sm" data-action="editEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '" data-ket="' + escapeHtml(e.keterangan || "") + '">Edit</button>' +
+        '<button type="button" class="btn btn-sm" data-action="editEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '" data-ket="' + escapeHtml(e.keterangan || "") + '" data-mode="' + (e.mode || "kehadiran") + '">Edit</button>' +
         '<button type="button" class="btn btn-sm" data-action="manageVilla" data-id="' + e.id + '">Penginapan</button>' +
         '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">Salin Link</button>' +
         '<button type="button" class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" data-action="toggleEvent" data-id="' + e.id + '" data-aktif="' + (e.aktif ? "true" : "false") + '">' +
@@ -356,15 +487,21 @@ async function renderAdmin() {
     '<input type="text" id="evNama" placeholder="Contoh: Gathering Tahunan 2026" /></div>' +
     '<div class="form-group"><label for="evKet">Keterangan (opsional)</label>' +
     '<textarea id="evKet" placeholder="Deskripsi singkat kegiatan"></textarea></div>' +
+    '<div class="form-group"><label for="evMode">Jenis Voting</label>' +
+    '<select id="evMode">' +
+    '<option value="kehadiran">Voting Kehadiran (Ya / Tidak)</option>' +
+    '<option value="gambar">Voting Gambar (Upload & Vote)</option>' +
+    '</select></div>' +
     '<button type="button" class="btn" id="evSubmitBtn" data-action="createEvent">Buat Event</button>' +
     '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Event</h3>' +
     (rows || '<div class="empty">Belum ada event.</div>') + "</div>";
 }
 
-function editEvent(id, nama, ket) {
+function editEvent(id, nama, ket, mode) {
   currentEditEventId = id;
   document.getElementById("evNama").value = nama;
   document.getElementById("evKet").value = ket || "";
+  document.getElementById("evMode").value = mode || "kehadiran";
   document.getElementById("evFormNote").textContent = "Mengedit: " + nama + ". Klik 'Update Event' untuk menyimpan.";
   document.getElementById("evSubmitBtn").textContent = "Update Event";
 }
@@ -372,13 +509,14 @@ function editEvent(id, nama, ket) {
 async function createEvent() {
   const nama = document.getElementById("evNama").value.trim();
   const ket = document.getElementById("evKet").value.trim();
+  const mode = document.getElementById("evMode").value || "kehadiran";
   const client = getSupabase();
   if (!nama) { adminMsg("Nama event wajib diisi.", "error"); return; }
   if (currentEditEventId) {
-    const { error } = await client.from("events").update({ nama, keterangan: ket }).eq("id", currentEditEventId);
+    const { error } = await client.from("events").update({ nama, keterangan: ket, mode }).eq("id", currentEditEventId);
     if (error) { adminMsg("Gagal update: " + error.message, "error"); return; }
   } else {
-    const { error } = await client.from("events").insert({ nama, keterangan: ket });
+    const { error } = await client.from("events").insert({ nama, keterangan: ket, mode });
     if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
   }
   renderAdmin();
@@ -522,7 +660,7 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   const a = el.dataset.action;
   if (a === "adminLogin") adminLogin();
   else if (a === "createEvent") createEvent();
-  else if (a === "editEvent") editEvent(el.dataset.id, el.dataset.nama, el.dataset.ket);
+  else if (a === "editEvent") editEvent(el.dataset.id, el.dataset.nama, el.dataset.ket, el.dataset.mode);
   else if (a === "copyLink") copyLink(el.dataset.id);
   else if (a === "toggleEvent") toggleEvent(el.dataset.id, el.dataset.aktif === "true");
   else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
@@ -534,4 +672,12 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
 });
 
 // ---------- Init ----------
+document.getElementById("gGallery").addEventListener("click", function (ev) {
+  const el = ev.target.closest("[data-upload-id]");
+  if (!el) return;
+  voteGambar(el.dataset.uploadId, el.dataset.uploadNama);
+});
+document.getElementById("gVoteNama").addEventListener("input", function () {
+  if (currentEventMode === "gambar") loadGambar();
+});
 router();

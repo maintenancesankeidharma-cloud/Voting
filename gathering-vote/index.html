@@ -130,6 +130,16 @@
     .villa-card .vc-fas { color: var(--text); font-size: 0.85rem; margin-bottom: 10px; flex: 1; white-space: pre-line; }
     .villa-card .vc-price { font-weight: 800; color: var(--primary); font-size: 1.05rem; }
 
+    /* GALLERY VOTING GAMBAR */
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:aug 16px; }
+    .g-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+    .g-card img { width: 100%; height: 170px; object-fit: cover; background: #f1f5f9; }
+    .g-card .gc-body { padding: 12px; display: flex; flex-direction: column; gap:aug 8px; flex:  ﻿1; }
+    .g-card .gc-nama { font-weight: 700; font-size: 0.9rem; }
+    .g-card .gc-count { font-size: 0.8rem; color: var(--muted); }
+    .g-card .gc-vote { border: none; background: var(--primary); color: #fff; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 700; }
+    .g-card .gc-vote:disabled { background: #93c5fd; cursor: not-allowed; }
+
     /* FORM */
     .form-group { margin-bottom: 18px; }
     .form-group label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.95rem; }
@@ -338,6 +348,7 @@
 
       <!-- TAB VOTING -->
       <div id="panelVote">
+      <div id="formKehadiran">
       <h2 style="font-size:1rem;">✍️ Form Keikutsertaan</h2>
       <form id="voteForm" autocomplete="on" onsubmit="return submitVote(event)">
         <div class="form-group">
@@ -370,7 +381,9 @@
         <button type="submit" class="btn" id="submitBtn">Kirim Voting</button>
         <div class="message" id="message"></div>
       </form>
+      </div><!-- /formKehadiran -->
 
+      <div id="dashKehadiran">
       <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;" />
 
       <h2>📊 Ringkasan Hasil Voting</h2>
@@ -395,6 +408,39 @@
           <tr><td colspan="6" class="empty">Belum ada respons.</td></tr>
         </tbody>
       </table>
+      </div>
+      </div><!-- /dashKehadiran -->
+
+      <!-- PANEL VOTING GAMBAR -->
+      <div id="gambarPanel" style="display:none;">
+        <h2 style="font-size:1rem;">📸 Upload Gambar & Voting</h2>
+        <div class="dashboard-note" id="gambarMsg"></div>
+        <form id="gambarUploadForm" onsubmit="return submitGambarUpload(event)">
+          <div class="form-group">
+            <label for="gNama">Nama Lengkap</label>
+            <input type="text" id="gNama" name="gNama" placeholder="Masukkan nama kamu" autocomplete="name" required />
+          </div>
+          <div class="form-group">
+            <label for="gNoWa">No. WhatsApp</label>
+            <input type="tel" id="gNoWa" name="gNoWa" placeholder="Contoh: 0812xxxx" autocomplete="tel" required />
+          </div>
+          <div class="form-group">
+            <label for="gFile">Pilih Foto</label>
+            <input type="file" id="gFile" accept="image/*" required />
+          </div>
+          <button type="submit" class="btn" id="gUploadBtn">Upload Gambar</button>
+        </form>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;" />
+
+        <h2>📊 Hasil Voting Gambar</h2>
+        <div class="voter-summary" id="gvoterSummary">0 dari 0 member telah memilih</div>
+        <div class="form-group" style="max-width:320px;">
+          <label for="gVoteNama">Nama Anda (untuk voting)</label>
+          <input type="text" id="gVoteNama" placeholder="Masukkan nama untuk vote" autocomplete="name" />
+        </div>
+        <div class="dashboard-note" id="gNote">Memuat...</div>
+        <div class="gallery" id="gGallery"></div>
       </div>
       </div><!-- /panelVote -->
 

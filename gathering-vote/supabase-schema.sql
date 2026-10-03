@@ -9,6 +9,7 @@ create table if not exists public.events (
   nama text not null,
   keterangan text default '',
   aktif boolean not null default true,
+  mode text not null default 'kehadiran',
   created_at timestamptz not null default now()
 );
 
@@ -35,6 +36,38 @@ create table if not exists public.villa (
   created_at timestamptz not null default now()
 );
 
+-- 4) Tabel voting gambar (peserta upload lalu di-vote)
+
+create table if not exists public.gambar_uploads (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid references public.events (id) on delete cascade,
+  nama text not null,
+  no_wa text not null,
+  foto_path text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.gambar_votes (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid references public.events (id) on delete cascade,
+  upload_id uuid references public.gambar_uploads (id) on delete cascade,
+  nama text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.gambar_uploads enable row level security;
+alter table public.gambar_votes enable row level security;
+
+alter table public.gambar_votes add constraint gambar_votes_event_nama_unique unique(event_id, nama);
+alter table public.gambar_uploads add constraint gambar_uploads_event_nama_unique unique(event_id, nama);
+
+-- Bucket storage publik untuk gambar
+insert into storage.buckets(id, name, public)values('gambar', 'gambar', true)on conflict(id)do update set public=true;
+drop policy if exists "gambar anon insert" on storage.objects;
+drop policy if exists "gambar anon select" on storage.objects;
+create policy "gambar anon insert" on storage.objects for insert with check(bucket_id = 'gambar');
+create policy "gambar anon select" on storage.objects for select using(bucket_id = 'gambar');
+
 -- ============================================================
 -- KEBUTUHAN UNTUK TABEL LAMA (yang sudah ada kolomnya)
 -- ============================================================
@@ -43,6 +76,9 @@ alter table public.responses
   add column if not exists no_wa text,
   add column if not exists alasan text default '',
   add column if not exists event_id uuid references public.events (id) on delete cascade;
+
+alter table public.events
+  add column if not exists mode text not null default 'kehadiran';
 
 -- Hapus kolom 'kontak' lama (sudah diganti email + no_wa)
 alter table public.responses
@@ -102,4 +138,24 @@ begin
   if not exists (select 1 from pg_policies where tablename = 'villa' and policyname = 'allow public delete') then
     create policy "allow public delete" on public.villa for delete using (true);
   end if;
-end $$;
+
+  if not exists (select 1 from pg_policies where tablename = 'gambar_uploads'and policyname = 'allow public select') then
+    create policy "allow public select" on public.gambar_uploads for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'gambar_uploads'and policyname = 'allow public insert') then
+    create policy "allow public insert" on public.gambar_uploads for insert with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'gambar_uploads'and policyname = 'allow public delete') thenfra
+    create policy "allow public delete" on public.gambar_uploads for delete using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public select') thenfra
+    create policy "allow public select" on public.gambar_votes for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public insert') thenfra
+    create policy "allow public insert" on public.gambar_votes for insert with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public delete') thenfra
+    create policy "allow public delete" on public.gambar_votes for delete using (true);
+  end if;
+end $;
