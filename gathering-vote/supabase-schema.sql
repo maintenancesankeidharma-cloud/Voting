@@ -145,17 +145,17 @@ begin
   if not exists (select 1 from pg_policies where tablename = 'gambar_uploads'and policyname = 'allow public insert') then
     create policy "allow public insert" on public.gambar_uploads for insert with check (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'gambar_uploads'and policyname = 'allow public delete') thenfra
+  if not exists (select 1 from pg_policies where tablename = 'gambar_uploads'and policyname = 'allow public delete') then
     create policy "allow public delete" on public.gambar_uploads for delete using (true);
   end if;
 
-  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public select') thenfra
+  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public select') then
     create policy "allow public select" on public.gambar_votes for select using (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public insert') thenfra
+  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public insert') then
     create policy "allow public insert" on public.gambar_votes for insert with check (true);
   end if;
-  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public delete') thenfra
+  if not exists (select 1 from pg_policies where tablename = 'gambar_votes'and policyname = 'allow public delete') then
     create policy "allow public delete" on public.gambar_votes for delete using (true);
   end if;
-end $;
+end $$;
