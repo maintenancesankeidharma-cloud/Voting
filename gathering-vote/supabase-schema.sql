@@ -14,7 +14,6 @@ create table if not exists public.events (
 );
 
 -- 2) Tabel responses (dengan event_id)
-)
 create table if not exists public.responses (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references public.events (id) on delete cascade,
@@ -27,7 +26,6 @@ create table if not exists public.responses (
 );
 
 -- 3) Tabel villa(katalog penginapan per event)
-)
 create table if not exists public.villa (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references public.events (id) on delete cascade,
@@ -39,7 +37,6 @@ create table if not exists public.villa (
 );
 
 -- 4) Tabel voting gambar (peserta upload lalu di-vote)
-)
 create table if not exists public.gambar_uploads (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references public.events (id) on delete cascade,
