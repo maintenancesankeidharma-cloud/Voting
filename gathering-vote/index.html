@@ -413,32 +413,17 @@
 
       <!-- PANEL VOTING GAMBAR -->
       <div id="gambarPanel" style="display:none;">
-        <h2 style="font-size:1rem;">📸 Upload Gambar & Voting</h2>
+        <h2 style="font-size:1rem;">🗳️ Pilih Design</h2>
         <div class="dashboard-note" id="gambarMsg"></div>
-        <form id="gambarUploadForm" onsubmit="return submitGambarUpload(event)">
-          <div class="form-group">
-            <label for="gNama">Nama Lengkap</label>
-            <input type="text" id="gNama" name="gNama" placeholder="Masukkan nama kamu" autocomplete="name" required />
-          </div>
-          <div class="form-group">
-            <label for="gNoWa">No. WhatsApp</label>
-            <input type="tel" id="gNoWa" name="gNoWa" placeholder="Contoh: 0812xxxx" autocomplete="tel" required />
-          </div>
-          <div class="form-group">
-            <label for="gFile">Pilih Foto</label>
-            <input type="file" id="gFile" accept="image/*" required />
-          </div>
-          <button type="submit" class="btn" id="gUploadBtn">Upload Gambar</button>
-        </form>
+        <div class="form-group" style="max-width:360px;">
+          <label for="gVoteNama">Nama Anda</label>
+          <input type="text" id="gVoteNama" placeholder="Masukkan nama kamu" autocomplete="name" required />
+        </div>
 
         <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;" />
 
-        <h2>📊 Hasil Voting Gambar</h2>
+        <h2>📊 Hasil Voting Design</h2>
         <div class="voter-summary" id="gvoterSummary">0 dari 0 member telah memilih</div>
-        <div class="form-group" style="max-width:320px;">
-          <label for="gVoteNama">Nama Anda (untuk voting)</label>
-          <input type="text" id="gVoteNama" placeholder="Masukkan nama untuk vote" autocomplete="name" />
-        </div>
         <div class="dashboard-note" id="gNote">Memuat...</div>
         <div class="gallery" id="gGallery"></div>
       </div>

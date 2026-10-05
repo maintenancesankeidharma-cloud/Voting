@@ -90,6 +90,10 @@ alter table public.responses
 alter table public.events
   add column if not exists mode text not null default 'kehadiran';
 
+-- gambar_uploads = daftar design (dibuat admin). no_wa tidak dipakai lagi.
+alter table public.gambar_uploads
+  alter column no_wa drop not null;
+
 -- Hapus kolom 'kontak' lama (sudah diganti email + no_wa)
 alter table public.responses
   drop column if exists kontak;

@@ -105,7 +105,7 @@ async function openEvent(id) {
   document.querySelectorAll(".option").forEach((o) =>
     o.classList.remove("selected-yes", "selected-no", "selected-maybe")
   );
-  document.getElementById("gambarUploadForm").reset();
+  document.getElementById("gVoteNama").value = "";
   document.getElementById("gambarMsg").textContent = "";
 
   const isGambar = currentEventMode === "gambar";
@@ -303,51 +303,9 @@ async function loadVilla() {
   ).join("");
 }
 
-// ---------- VOTING GAMBAR ----------
+// ---------- VOTING DESIGN (GAMBAR) ----------
 function gambarPublicUrl(path) {
   return window.SUPABASE_URL + "/storage/v1/object/public/gambar/" + encodeURIComponent(path);
-}
-
-async function submitGambarUpload(event) {
-  if (event) event.preventDefault();
-  const nama = document.getElementById("gNama").value.trim();
-  const noWa = document.getElementById("gNoWa").value.trim();
-  const file = document.getElementById("gFile").files[0];
-  const msg = document.getElementById("gambarMsg");
-  const btn = document.getElementById("gUploadBtn");
-
-  msg.textContent = "";
-  if (!nama) { msg.textContent = "Nama wajib diisi."; return; }
-  if (!noWa) { msg.textContent = "No. WA wajib diisi."; return; }
-  if (!file) { msg.textContent = "Pilih file gambar."; return; }
-  if (!file.type.match(/image/)) { msg.textContent = "File harus berupa gambar."; return; }
-
-  const client = getSupabase();
-  if (!client) { msg.textContent = "Supabase belum dikonfigurasi."; return; }
-
-  btn.disabled = true;
-  btn.textContent = "Mengupload...";
-  try {
-    const { count: dup } = await client
-      .from("gambar_uploads").select("id", { count: "exact", head: true })
-      .eq("event_id", currentEventId).eq("nama", nama);
-    if (dup > 0) { msg.textContent = "Nama ini sudah pernah mengupload gambar untuk event ini."; btn.disabled = false; btn.textContent = "Upload Gambar"; return; }
-
-    const path = currentEventId + "/" + Date.now() + "-" + file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const { error: upErr } = await client.storage.from("gambar").upload(path, file, { upsert: false });
-    if (upErr) throw upErr;
-
-    const { error } = await client.from("gambar_uploads").insert({ event_id: currentEventId, nama, no_wa: noWa, foto_path: path });
-    if (error) throw error;
-    msg.textContent = "Gambar berhasil diupload!";
-    document.getElementById("gambarUploadForm").reset();
-    loadGambar();
-  } catch (err) {
-    msg.textContent = "Gagal upload: " + (err.message || err);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Upload Gambar";
-  }
 }
 
 async function loadGambar() {
@@ -365,8 +323,8 @@ async function loadGambar() {
 
   if (uploadsRes.error) { note.textContent = "Gagal: " + uploadsRes.error.message; return; }
 
-  const uploads = uploadsRes.data || [];
-  const votes = (votesRes.data || []);
+  const designs = uploadsRes.data || [];
+  const votes = votesRes.data || [];
   const countMap = {};
   votes.forEach((v) => { countMap[v.upload_id] = (countMap[v.upload_id] || 0) + 1; });
 
@@ -376,33 +334,32 @@ async function loadGambar() {
     ? votes.length + " dari " + totalMembers + " member telah memilih (" + Math.round((votes.length / totalMembers) * 100) + "%)"
     : votes.length + " member telah memilih";
 
-  note.textContent = uploads.length ? uploads.length + " gambar terupload." : "Belum ada gambar. Upload gambar pertama di atas.";
+  note.textContent = designs.length ? designs.length + " pilihan design." : "Belum ada design. Admin belum menambah design.";
 
-  if (!uploads.length) { gal.innerHTML = '<div class="empty">Belum ada gambar.</div>'; return; }
+  if (!designs.length) { gal.innerHTML = '<div class="empty">Belum ada design.</div>'; return; }
 
   const myVoteName = (document.getElementById("gVoteNama").value || "").trim().toLowerCase();
+  const alreadyVoted = myVoteName && votedNames.has(myVoteName);
 
-  gal.innerHTML = uploads.map((u) => {
+  gal.innerHTML = designs.map((u) => {
     const cnt = countMap[u.id] || 0;
-    const isOwn = u.nama.toLowerCase() === myVoteName;
-    const alreadyVoted = myVoteName && votedNames.has(myVoteName);
-    const btnDisabled = !myVoteName || isOwn || alreadyVoted;
+    const btnDisabled = !myVoteName || alreadyVoted;
+    const label = alreadyVoted ? "Sudah voting" : "Pilih";
     return (
       '<div class="g-card">' +
       '<img src="' + escapeHtml(gambarPublicUrl(u.foto_path)) + '" alt="' + escapeHtml(u.nama) + '" onerror="villaImgError(this)" />' +
       '<div class="gc-body">' +
       '<div class="gc-nama">' + escapeHtml(u.nama) + "</div>" +
-      '<div class="gc-count">' + cnt + " suara" + (isOwn ? " (milik Anda)" : "") + "</div>" +
-      '<button type="button" class="gc-vote" data-upload-id="' + u.id + '" data-upload-nama="' + escapeHtml(u.nama) + '"' + (btnDisabled ? " disabled" : "") + '>Vote</button>' +
+      '<div class="gc-count">' + cnt + " suara</div>" +
+      '<button type="button" class="gc-vote" data-upload-id="' + u.id + '"' + (btnDisabled ? " disabled" : "") + '>' + label + '</button>' +
       "</div></div>"
     );
   }).join("");
 }
 
-async function voteGambar(uploadId, uploadNama) {
+async function voteGambar(uploadId) {
   const nama = (document.getElementById("gVoteNama").value || "").trim();
-  if (!nama) { alert("Isi nama Anda untuk vote."); return; }
-  if (nama.toLowerCase() === String(uploadNama).toLowerCase()) { alert("Tidak bisa vote gambar milik sendiri."); return; }
+  if (!nama) { alert("Isi nama Anda dulu untuk memilih design."); return; }
 
   const client = getSupabase();
   if (!client) return;
@@ -410,12 +367,74 @@ async function voteGambar(uploadId, uploadNama) {
   const { count: dup } = await client
     .from("gambar_votes").select("id", { count: "exact", head: true })
     .eq("event_id", currentEventId).eq("nama", nama);
-  if (dup > 0) { alert("Nama ini sudah pernah vote di event ini."); return; }
+  if (dup > 0) { alert("Nama ini sudah pernah memilih di event ini."); return; }
 
   const { error } = await client.from("gambar_votes").insert({ event_id: currentEventId, upload_id: uploadId, nama });
-  if (error) { alert("Gagal vote: " + (error.message || error)); return; }
-  alert("Vote berhasil!");
+  if (error) { alert("Gagal memilih: " + (error.message || error)); return; }
+  alert("Pilihan tersimpan. Terima kasih!");
   loadGambar();
+}
+
+// ---------- ADMIN: KELOLA DESIGN ----------
+let currentDesignEventId = null;
+
+async function manageDesign(eventId) {
+  currentDesignEventId = eventId;
+  const body = document.getElementById("adminBody");
+  const client = getSupabase();
+  if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
+
+  const { data: ev } = await client.from("events").select("nama").eq("id", eventId).single();
+  const { data } = await client.from("gambar_uploads").select("id,nama,foto_path").eq("event_id", eventId).order("created_at", { ascending: true });
+
+  const rows = (data || []).map((d) =>
+    '<div class="admin-row">' +
+    '<div class="ar-name">' + escapeHtml(d.nama) + "</div>" +
+    '<div class="ar-actions"><button type="button" class="btn btn-sm btn-danger" data-action="deleteDesign" data-id="' + d.id + '" data-path="' + escapeHtml(d.foto_path) + '">Hapus</button></div>' +
+    "</div>"
+  ).join("");
+
+  body.innerHTML =
+    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
+    '<h2 style="font-size:1.1rem;margin-bottom:4px;">🎨 Design: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
+    '<div class="dashboard-note" id="designFormNote">Tambah gambar design untuk dipilih peserta.</div>' +
+    '<div class="form-group"><label for="dNama">Nama Design</label><input type="text" id="dNama" placeholder="Contoh: Design A" /></div>' +
+    '<div class="form-group"><label for="dFile">File Gambar</label><input type="file" id="dFile" accept="image/*" /></div>' +
+    '<button type="button" class="btn" id="designSubmitBtn" data-action="addDesign">Tambah Design</button>' +
+    '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Design</h3>' +
+    (rows || '<div class="empty">Belum ada design.</div>') + "</div>";
+}
+
+async function addDesign() {
+  const nama = document.getElementById("dNama").value.trim();
+  const file = document.getElementById("dFile").files[0];
+  const note = document.getElementById("designFormNote");
+  const btn = document.getElementById("designSubmitBtn");
+  if (!nama) { adminMsg("Nama design wajib diisi.", "error"); return; }
+  if (!file) { adminMsg("Pilih file gambar.", "error"); return; }
+  if (!file.type.match(/image/)) { adminMsg("File harus berupa gambar.", "error"); return; }
+
+  const client = getSupabase();
+  btn.disabled = true; btn.textContent = "Mengupload...";
+  try {
+    const path = currentDesignEventId + "/" + Date.now() + "-" + file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const { error: upErr } = await client.storage.from("gambar").upload(path, file, { upsert: false });
+    if (upErr) throw upErr;
+    const { error } = await client.from("gambar_uploads").insert({ event_id: currentDesignEventId, nama, foto_path: path });
+    if (error) throw error;
+    manageDesign(currentDesignEventId);
+  } catch (err) {
+    adminMsg("Gagal: " + (err.message || err), "error");
+    btn.disabled = false; btn.textContent = "Tambah Design";
+  }
+}
+
+async function deleteDesign(id) {
+  if (!confirm("Hapus design ini?")) return;
+  const client = getSupabase();
+  const { error } = await client.from("gambar_uploads").delete().eq("id", id);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  manageDesign(currentDesignEventId);
 }
 
 // ---------- ADMIN ----------
@@ -472,6 +491,7 @@ async function renderAdmin() {
         (e.aktif ? "Aktif" : "Nonaktif") + "</div></div>" +
         '<div class="ar-actions">' +
         '<button type="button" class="btn btn-sm" data-action="editEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '" data-ket="' + escapeHtml(e.keterangan || "") + '" data-mode="' + (e.mode || "kehadiran") + '">Edit</button>' +
+        (e.mode === "gambar" ? '<button type="button" class="btn btn-sm" data-action="manageDesign" data-id="' + e.id + '">Design</button>' : "") +
         '<button type="button" class="btn btn-sm" data-action="manageVilla" data-id="' + e.id + '">Penginapan</button>' +
         '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">Salin Link</button>' +
         '<button type="button" class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" data-action="toggleEvent" data-id="' + e.id + '" data-aktif="' + (e.aktif ? "true" : "false") + '">' +
@@ -665,6 +685,9 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "toggleEvent") toggleEvent(el.dataset.id, el.dataset.aktif === "true");
   else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
   else if (a === "manageVilla") manageVilla(el.dataset.id);
+  else if (a === "manageDesign") manageDesign(el.dataset.id);
+  else if (a === "addDesign") addDesign();
+  else if (a === "deleteDesign") deleteDesign(el.dataset.id);
   else if (a === "addVilla") addVilla();
   else if (a === "editVilla") editVilla(el.dataset.id);
   else if (a === "deleteVilla") deleteVilla(el.dataset.id);
@@ -675,7 +698,7 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
 document.getElementById("gGallery").addEventListener("click", function (ev) {
   const el = ev.target.closest("[data-upload-id]");
   if (!el) return;
-  voteGambar(el.dataset.uploadId, el.dataset.uploadNama);
+  voteGambar(el.dataset.uploadId);
 });
 document.getElementById("gVoteNama").addEventListener("input", function () {
   if (currentEventMode === "gambar") loadGambar();
