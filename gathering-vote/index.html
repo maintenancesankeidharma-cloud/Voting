@@ -137,6 +137,8 @@
     .g-card .gc-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
     .g-card .gc-nama { font-weight: 700; font-size: 0.9rem; }
     .g-card .gc-count { font-size: 0.8rem; color: var(--muted); }
+    .g-card .gc-voters { font-size: 0.78rem; color: var(--text); line-height: 1.35; }
+    .g-card .gc-voters.muted { color: var(--muted); font-style: italic; }
     .g-card .gc-vote { border: none; background: var(--primary); color: #fff; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 700; }
     .g-card .gc-vote:disabled { background: #93c5fd; cursor: not-allowed; }
 
@@ -448,6 +450,19 @@
         <div class="voter-summary" id="gvoterSummary">0 dari 0 member telah memilih</div>
         <div class="dashboard-note" id="gNote">Memuat...</div>
         <div class="gallery" id="gGallery"></div>
+
+        <h2 style="font-size:1rem; margin-top:24px;">👥 Daftar Pemilih</h2>
+        <div class="dashboard-note" id="gVoterListNote">Belum ada yang memilih.</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Nama</th><th>Pilihan Design</th><th>Waktu</th></tr>
+            </thead>
+            <tbody id="gVoterTable">
+              <tr><td colspan="3" class="empty">Belum ada yang memilih.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       </div><!-- /panelVote -->
 

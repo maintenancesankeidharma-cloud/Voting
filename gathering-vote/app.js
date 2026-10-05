@@ -318,7 +318,7 @@ async function loadGambar() {
 
   const [uploadsRes, votesRes] = await Promise.all([
     client.from("gambar_uploads").select("id,nama,foto_path").eq("event_id", currentEventId).order("created_at", { ascending: true }),
-    client.from("gambar_votes").select("id,upload_id,nama").eq("event_id", currentEventId),
+    client.from("gambar_votes").select("id,upload_id,nama,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
   ]);
 
   if (uploadsRes.error) { note.textContent = "Gagal: " + uploadsRes.error.message; return; }
@@ -326,7 +326,11 @@ async function loadGambar() {
   const designs = uploadsRes.data || [];
   const votes = votesRes.data || [];
   const countMap = {};
-  votes.forEach((v) => { countMap[v.upload_id] = (countMap[v.upload_id] || 0) + 1; });
+  const votersByDesign = {};
+  votes.forEach((v) => {
+    countMap[v.upload_id] = (countMap[v.upload_id] || 0) + 1;
+    (votersByDesign[v.upload_id] = votersByDesign[v.upload_id] || []).push(v.nama);
+  });
 
   const totalMembers = Number(window.TOTAL_MEMBERS) || 0;
   const votedNames = new Set(votes.map((v) => v.nama.toLowerCase()));
@@ -335,6 +339,9 @@ async function loadGambar() {
     : votes.length + " member telah memilih";
 
   note.textContent = designs.length ? designs.length + " pilihan design." : "Belum ada design. Admin belum menambah design.";
+
+  // Daftar pemilih
+  renderVoterTable(designs, votes);
 
   if (!designs.length) { gal.innerHTML = '<div class="empty">Belum ada design.</div>'; return; }
 
@@ -345,15 +352,40 @@ async function loadGambar() {
     const cnt = countMap[u.id] || 0;
     const btnDisabled = !myVoteName || alreadyVoted;
     const label = alreadyVoted ? "Sudah voting" : "Pilih";
+    const names = votersByDesign[u.id] || [];
+    const namesHtml = names.length
+      ? '<div class="gc-voters">👤 ' + names.map(escapeHtml).join(", ") + "</div>"
+      : '<div class="gc-voters muted">Belum ada yang memilih</div>';
     return (
       '<div class="g-card">' +
       '<img src="' + escapeHtml(gambarPublicUrl(u.foto_path)) + '" alt="' + escapeHtml(u.nama) + '" onclick="openLightbox(this.src)" onerror="villaImgError(this)" />' +
       '<div class="gc-body">' +
       '<div class="gc-nama">' + escapeHtml(u.nama) + "</div>" +
       '<div class="gc-count">' + cnt + " suara</div>" +
+      namesHtml +
       '<button type="button" class="gc-vote" data-upload-id="' + u.id + '"' + (btnDisabled ? " disabled" : "") + '>' + label + '</button>' +
       "</div></div>"
     );
+  }).join("");
+}
+
+function renderVoterTable(designs, votes) {
+  const tbody = document.getElementById("gVoterTable");
+  const noteEl = document.getElementById("gVoterListNote");
+  if (!tbody) return;
+  const nameMap = {};
+  designs.forEach((d) => { nameMap[d.id] = d.nama; });
+  if (!votes.length) {
+    if (noteEl) noteEl.textContent = "Belum ada yang memilih.";
+    tbody.innerHTML = '<tr><td colspan="3" class="empty">Belum ada yang memilih.</td></tr>';
+    return;
+  }
+  if (noteEl) noteEl.textContent = votes.length + " orang sudah memilih.";
+  tbody.innerHTML = votes.map((v) => {
+    const time = v.created_at
+      ? new Date(v.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+      : "–";
+    return "<tr><td>" + escapeHtml(v.nama) + "</td><td>" + escapeHtml(nameMap[v.upload_id] || "-") + "</td><td>" + time + "</td></tr>";
   }).join("");
 }
 
