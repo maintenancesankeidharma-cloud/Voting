@@ -120,7 +120,7 @@
       display: flex;
       flex-direction: column;
     }
-    .villa-card img { width: 100%; height: 160px; object-fit: cover; background: #f1f5f9; }
+    .villa-card img { width: 100%; height: 160px; object-fit: contain; background: #f1f5f9; cursor: zoom-in; }
     .villa-card .vc-noimg {
       width: 100%; height: 160px; display: flex; align-items: center; justify-content: center;
       color: var(--muted); background: #f1f5f9; font-size: 0.85rem;
@@ -131,14 +131,36 @@
     .villa-card .vc-price { font-weight: 800; color: var(--primary); font-size: 1.05rem; }
 
     /* GALLERY VOTING GAMBAR */
-    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:aug 16px; }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
     .g-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
-    .g-card img { width: 100%; height: 170px; object-fit: cover; background: #f1f5f9; }
-    .g-card .gc-body { padding: 12px; display: flex; flex-direction: column; gap:aug 8px; flex:  ﻿1; }
+    .g-card img { width: 100%; height: 170px; object-fit: contain; background: #f1f5f9; cursor: zoom-in; }
+    .g-card .gc-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
     .g-card .gc-nama { font-weight: 700; font-size: 0.9rem; }
     .g-card .gc-count { font-size: 0.8rem; color: var(--muted); }
     .g-card .gc-vote { border: none; background: var(--primary); color: #fff; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 700; }
     .g-card .gc-vote:disabled { background: #93c5fd; cursor: not-allowed; }
+
+    /* LIGHTBOX (lihat gambar penuh) */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      cursor: zoom-out;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 100%; max-height: 92vh; object-fit: contain; border-radius: 6px; }
+    .lightbox .lb-close {
+      position: fixed;
+      top: 16px; right: 20px;
+      color: #fff; font-size: 2rem; line-height: 1;
+      background: rgba(255,255,255,0.15); border: none; border-radius: 50%;
+      width: 44px; height: 44px; cursor: pointer;
+    }
 
     /* FORM */
     .form-group { margin-bottom: 18px; }
@@ -437,6 +459,12 @@
     </div>
 
     <footer>Voting Keikutsertaan Gathering &bull; Diperbarui otomatis</footer>
+  </div>
+
+  <!-- LIGHTBOX: lihat gambar penuh -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <button class="lb-close" onclick="closeLightbox()">&times;</button>
+    <img id="lightboxImg" src="" alt="Gambar" onclick="event.stopPropagation()" />
   </div>
 
   <!-- ADMIN MODAL -->

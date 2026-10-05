@@ -294,7 +294,7 @@ async function loadVilla() {
 
   grid.innerHTML = rows.map((v) =>
     '<div class="villa-card">' +
-    (v.foto_url ? '<img src="' + escapeHtml(v.foto_url) + '" alt="' + escapeHtml(v.nama) + '" onerror="villaImgError(this)" />' : '<div class="vc-noimg">Tanpa gambar</div>') +
+    (v.foto_url ? '<img src="' + escapeHtml(v.foto_url) + '" alt="' + escapeHtml(v.nama) + '" onclick="openLightbox(this.src)" onerror="villaImgError(this)" />' : '<div class="vc-noimg">Tanpa gambar</div>') +
     '<div class="vc-body">' +
     '<div class="vc-name">' + escapeHtml(v.nama) + "</div>" +
     (v.fasilitas ? '<div class="vc-fas">' + escapeHtml(v.fasilitas) + "</div>" : "") +
@@ -347,7 +347,7 @@ async function loadGambar() {
     const label = alreadyVoted ? "Sudah voting" : "Pilih";
     return (
       '<div class="g-card">' +
-      '<img src="' + escapeHtml(gambarPublicUrl(u.foto_path)) + '" alt="' + escapeHtml(u.nama) + '" onerror="villaImgError(this)" />' +
+      '<img src="' + escapeHtml(gambarPublicUrl(u.foto_path)) + '" alt="' + escapeHtml(u.nama) + '" onclick="openLightbox(this.src)" onerror="villaImgError(this)" />' +
       '<div class="gc-body">' +
       '<div class="gc-nama">' + escapeHtml(u.nama) + "</div>" +
       '<div class="gc-count">' + cnt + " suara</div>" +
@@ -666,6 +666,17 @@ async function deleteVilla(id) {
 
 function villaImgError(img) {
   img.outerHTML = '<div class="vc-noimg">Gambar tidak tersedia</div>';
+}
+
+function openLightbox(src) {
+  if (!src) return;
+  document.getElementById("lightboxImg").src = src;
+  document.getElementById("lightbox").classList.add("open");
+}
+
+function closeLightbox() {
+  document.getElementById("lightbox").classList.remove("open");
+  document.getElementById("lightboxImg").src = "";
 }
 
 function escapeHtml(s) {
