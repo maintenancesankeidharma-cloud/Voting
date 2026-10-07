@@ -346,12 +346,21 @@ async function loadGambar() {
   if (!designs.length) { gal.innerHTML = '<div class="empty">Belum ada design.</div>'; return; }
 
   const myVoteName = (document.getElementById("gVoteNama").value || "").trim().toLowerCase();
-  const alreadyVoted = myVoteName && votedNames.has(myVoteName);
+  const myVote = myVoteName ? votes.find((v) => v.nama.toLowerCase() === myVoteName) : null;
 
   gal.innerHTML = designs.map((u) => {
     const cnt = countMap[u.id] || 0;
-    const btnDisabled = !myVoteName || alreadyVoted;
-    const label = alreadyVoted ? "Sudah voting" : "Pilih";
+    let label = "Pilih";
+    let btnDisabled = !myVoteName;
+    if (myVote) {
+      if (myVote.upload_id === u.id) {
+        label = "✓ Pilihan Anda";
+        btnDisabled = true;
+      } else {
+        label = "Ganti ke ini";
+        btnDisabled = false;
+      }
+    }
     const names = votersByDesign[u.id] || [];
     const namesHtml = names.length
       ? '<div class="gc-voters">👤 ' + names.map(escapeHtml).join(", ") + "</div>"
@@ -399,11 +408,18 @@ async function voteGambar(uploadId) {
   const { count: dup } = await client
     .from("gambar_votes").select("id", { count: "exact", head: true })
     .eq("event_id", currentEventId).eq("nama", nama);
-  if (dup > 0) { alert("Nama ini sudah pernah memilih di event ini."); return; }
+
+  if (dup > 0) {
+    if (!confirm("Anda sudah pernah memilih. Ganti pilihan ke design ini?")) return;
+    const { error: delErr } = await client
+      .from("gambar_votes").delete()
+      .eq("event_id", currentEventId).eq("nama", nama);
+    if (delErr) { alert("Gagal mengganti: " + (delErr.message || delErr)); return; }
+  }
 
   const { error } = await client.from("gambar_votes").insert({ event_id: currentEventId, upload_id: uploadId, nama });
   if (error) { alert("Gagal memilih: " + (error.message || error)); return; }
-  alert("Pilihan tersimpan. Terima kasih!");
+  alert(dup > 0 ? "Pilihan berhasil diganti!" : "Pilihan tersimpan. Terima kasih!");
   loadGambar();
 }
 
