@@ -317,7 +317,7 @@ async function loadGambar() {
   if (!client) { note.textContent = "Supabase belum dikonfigurasi."; return; }
 
   const [uploadsRes, votesRes] = await Promise.all([
-    client.from("gambar_uploads").select("id,nama,foto_path").eq("event_id", currentEventId).order("created_at", { ascending: true }),
+    client.from("gambar_uploads").select("id,nama,foto_path,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
     client.from("gambar_votes").select("id,upload_id,nama,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
   ]);
 
@@ -330,6 +330,14 @@ async function loadGambar() {
   votes.forEach((v) => {
     countMap[v.upload_id] = (countMap[v.upload_id] || 0) + 1;
     (votersByDesign[v.upload_id] = votersByDesign[v.upload_id] || []).push(v.nama);
+  });
+
+  // Urutan sesuai filter: terbanyak (suara), terbaru upload, atau nama A-Z
+  const sortMode = (document.getElementById("gSort") && document.getElementById("gSort").value) || "terbanyak";
+  designs.sort((a, b) => {
+    if (sortMode === "terbanyak") return (countMap[b.id] || 0) - (countMap[a.id] || 0);
+    if (sortMode === "terbaru") return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    return String(a.nama).localeCompare(String(b.nama), "id");
   });
 
   const totalMembers = Number(window.TOTAL_MEMBERS) || 0;

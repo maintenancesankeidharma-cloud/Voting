@@ -449,6 +449,14 @@
         <h2>📊 Hasil Voting Design</h2>
         <div class="voter-summary" id="gvoterSummary">0 dari 0 member telah memilih</div>
         <div class="dashboard-note" id="gNote">Memuat...</div>
+        <div class="form-group" style="max-width:320px;">
+          <label for="gSort">Urutkan design</label>
+          <select id="gSort" onchange="loadGambar()">
+            <option value="terbanyak">Pilihan terbanyak</option>
+            <option value="terbaru">Terbaru upload</option>
+            <option value="nama">Nama design (A–Z)</option>
+          </select>
+        </div>
         <div class="gallery" id="gGallery"></div>
 
         <h2 style="font-size:1rem; margin-top:24px;">👥 Daftar Pemilih</h2>
