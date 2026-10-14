@@ -10,6 +10,7 @@ create table if not exists public.events (
   keterangan text default '',
   aktif boolean not null default true,
   mode text not null default 'kehadiran',
+  total_members integer not null default 22,
   created_at timestamptz not null default now()
 );
 

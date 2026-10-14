@@ -1,6 +1,16 @@
 let sbClient = null;
 let selectedStatus = null;
 let currentEventId = null;
+let currentEventTotalMembers = 22; // fallback default
+
+// Ambil total_members dari event di Supabase; fallback ke 22 jika belum diisi
+async function loadEventTotalMembers() {
+  if (!currentEventId) { currentEventTotalMembers = 22; return; }
+  const { data, error } = await getSupabase()
+    .from("events").select("total_members").eq("id", currentEventId).maybeSingle();
+  if (error || !data) { currentEventTotalMembers = 22; return; }
+  currentEventTotalMembers = Number(data.total_members) || 22;
+}
 let currentEventMode = "kehadiran";
 let adminAuthed = sessionStorage.getItem("vote_admin_auth") === "1";
 
@@ -78,6 +88,8 @@ async function openEvent(id) {
   document.getElementById("viewEvent").style.display = "block";
   document.getElementById("totalText").textContent = "Memuat...";
   currentEventId = id;
+
+  await loadEventTotalMembers();
 
   const client = getSupabase();
   if (!client) { alert("Supabase belum dikonfigurasi."); return; }
@@ -220,7 +232,7 @@ async function loadDashboard() {
   const cYes = rows.filter((r) => r.status === "ya").length;
   const cNo = rows.filter((r) => r.status === "tidak").length;
   const total = rows.length;
-  const totalMembers = Number(window.TOTAL_MEMBERS) || 0;
+  const totalMembers = currentEventTotalMembers;
 
   document.getElementById("countYes").textContent = cYes;
   document.getElementById("countNo").textContent = cNo;
@@ -340,7 +352,7 @@ async function loadGambar() {
     return String(a.nama).localeCompare(String(b.nama), "id");
   });
 
-  const totalMembers = Number(window.TOTAL_MEMBERS) || 0;
+  const totalMembers = currentEventTotalMembers;
   const votedNames = new Set(votes.map((v) => v.nama.toLowerCase()));
   sum.textContent = totalMembers > 0
     ? votes.length + " dari " + totalMembers + " member telah memilih (" + Math.round((votes.length / totalMembers) * 100) + "%)"
