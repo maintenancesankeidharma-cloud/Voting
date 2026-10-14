@@ -541,6 +541,50 @@ function adminMsg(text, type) {
     '<div class="message ' + type + '" style="display:block;">' + text + "</div>";
 }
 
+function promptTotalMembers(current, onSave) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.value = current || 22;
+  input.min = "1";
+  input.className = "admin-input";
+  input.style.marginRight = "8px";
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.textContent = "Simpan";
+  confirmBtn.className = "btn btn-sm btn-primary";
+  confirmBtn.onclick = () => onSave(Number(input.value));
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.textContent = "Batal";
+  cancelBtn.className = "btn btn-sm";
+  cancelBtn.onclick = () => onSave(null);
+  const d = document.createElement("div");
+  d.style.display = "flex";
+  d.style.alignItems = "center";
+  d.style.gap = "8px";
+  d.style.margin = "16px 0";
+  d.appendChild(input);
+  d.appendChild(confirmBtn);
+  d.appendChild(cancelBtn);
+  document.getElementById("adminBody").appendChild(d);
+  // focus input otomatis
+  setTimeout(() => input.focus(), 100);
+}
+
+async function setTotalMembers(id) {
+  if (!confirm("Masukkan total member baru untuk event ini?")) return;
+  const val = prompt("Total member baru (angka):") || "";
+  if (val === null) return;
+  const n = Number(val);
+  if (!n || n < 1) { alert("Masukkan angka valid > 0."); return; }
+  const client = getSupabase();
+  if (!client) return;
+  const { error } = await client.from("events").update({ total_members: n }).eq("id", id);
+  if (error) { alert("Gagal update: " + error.message); return; }
+  alert("Total member berhasil diupdate menjadi " + n + ".");
+  renderAdmin();
+}
+
 async function renderAdmin() {
   const body = document.getElementById("adminBody");
   currentEditEventId = null;
@@ -557,11 +601,12 @@ async function renderAdmin() {
         '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' +
         (e.mode === "gambar" ? "Voting Gambar" : "Voting Kehadiran") + " &bull; " +
         (e.aktif ? "Aktif" : "Nonaktif") + "</div></div>" +
-        '<div class="ar-actions">' +
+'<div class="ar-actions">' +
         '<button type="button" class="btn btn-sm" data-action="editEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '" data-ket="' + escapeHtml(e.keterangan || "") + '" data-mode="' + (e.mode || "kehadiran") + '">Edit</button>' +
         (e.mode === "gambar" ? '<button type="button" class="btn btn-sm" data-action="manageDesign" data-id="' + e.id + '">Design</button>' : "") +
         '<button type="button" class="btn btn-sm" data-action="manageVilla" data-id="' + e.id + '">Penginapan</button>' +
         '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">Salin Link</button>' +
+        '<button type="button" class="btn btn-sm" data-action="setTotalMembers" data-id="' + e.id + '">Total Members</button>' +
         '<button type="button" class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" data-action="toggleEvent" data-id="' + e.id + '" data-aktif="' + (e.aktif ? "true" : "false") + '">' +
         (e.aktif ? "Nonaktifkan" : "Aktifkan") + "</button>" +
         '<button type="button" class="btn btn-sm btn-danger" data-action="deleteEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '">Hapus</button>' +
@@ -771,6 +816,7 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "editVilla") editVilla(el.dataset.id);
   else if (a === "deleteVilla") deleteVilla(el.dataset.id);
   else if (a === "backEvents") renderAdmin();
+  else if (a === "setTotalMembers") setTotalMembers(el.dataset.id);
 });
 
 // ---------- Init ----------
