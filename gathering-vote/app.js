@@ -170,13 +170,17 @@ async function submitVote(event) {
   btn.disabled = true;
   btn.textContent = "Mengirim...";
   try {
-    const { count: existing, error: dupErr } = await client
+    // Cek duplikat case-insensitive: "Budi" dan "budi" dianggap sama
+    const { data: existingRows, error: dupErr } = await client
       .from("responses")
-      .select("id", { count: "exact", head: true })
+      .select("nama")
       .eq("event_id", currentEventId)
-      .eq("nama", nama);
+      .limit(500);
     if (dupErr) throw dupErr;
-    if (existing > 0) {
+    const alreadyVoted = (existingRows || []).some(
+      (r) => String(r.nama || "").trim().toLowerCase() === nama.toLowerCase()
+    );
+    if (alreadyVoted) {
       btn.disabled = false;
       btn.textContent = "Kirim Voting";
       return showMessage("Nama ini sudah pernah mengirim voting untuk event ini.", "error");
@@ -197,7 +201,12 @@ async function submitVote(event) {
     selectedStatus = null;
     loadDashboard();
   } catch (err) {
-    showMessage("Gagal mengirim: " + (err.message || err), "error");
+    const msg = String((err && err.message) || err || "");
+    if (err && (err.code === "23505" || msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("unique"))) {
+      showMessage("Nama ini sudah pernah mengirim voting untuk event ini.", "error");
+    } else {
+      showMessage("Gagal mengirim: " + msg, "error");
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = "Kirim Voting";
@@ -317,7 +326,8 @@ async function loadVilla() {
 
 // ---------- VOTING DESIGN (GAMBAR) ----------
 function gambarPublicUrl(path) {
-  return window.SUPABASE_URL + "/storage/v1/object/public/gambar/" + encodeURIComponent(path);
+  const clean = String(path || "").split("/").map((s) => encodeURIComponent(s)).join("/");
+  return window.SUPABASE_URL + "/storage/v1/object/public/gambar/" + clean;
 }
 
 async function loadGambar() {
@@ -425,21 +435,27 @@ async function voteGambar(uploadId) {
   const client = getSupabase();
   if (!client) return;
 
-  const { count: dup } = await client
-    .from("gambar_votes").select("id", { count: "exact", head: true })
-    .eq("event_id", currentEventId).eq("nama", nama);
+  // Cek duplikat case-insensitive: "Budi" dan "budi" dianggap sama
+  const { data: existingVotes, error: dupErr } = await client
+    .from("gambar_votes").select("id,nama")
+    .eq("event_id", currentEventId)
+    .limit(500);
+  if (dupErr) { alert("Gagal memeriksa pilihan: " + (dupErr.message || dupErr)); return; }
+  const mine = (existingVotes || []).find(
+    (v) => String(v.nama || "").trim().toLowerCase() === nama.toLowerCase()
+  );
 
-  if (dup > 0) {
+  if (mine) {
     if (!confirm("Anda sudah pernah memilih. Ganti pilihan ke design ini?")) return;
     const { error: delErr } = await client
       .from("gambar_votes").delete()
-      .eq("event_id", currentEventId).eq("nama", nama);
+      .eq("id", mine.id);
     if (delErr) { alert("Gagal mengganti: " + (delErr.message || delErr)); return; }
   }
 
   const { error } = await client.from("gambar_votes").insert({ event_id: currentEventId, upload_id: uploadId, nama });
   if (error) { alert("Gagal memilih: " + (error.message || error)); return; }
-  alert(dup > 0 ? "Pilihan berhasil diganti!" : "Pilihan tersimpan. Terima kasih!");
+  alert(mine ? "Pilihan berhasil diganti!" : "Pilihan tersimpan. Terima kasih!");
   loadGambar();
 }
 
@@ -497,11 +513,16 @@ async function addDesign() {
   }
 }
 
-async function deleteDesign(id) {
+async function deleteDesign(id, fotoPath) {
   if (!confirm("Hapus design ini?")) return;
   const client = getSupabase();
   const { error } = await client.from("gambar_uploads").delete().eq("id", id);
   if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  // Hapus file di Storage agar tidak jadi orphan (diabaikan jika gagal)
+  if (fotoPath) {
+    const { error: storageErr } = await client.storage.from("gambar").remove([fotoPath]);
+    if (storageErr) { adminMsg("Data terhapus, tapi file gambar gagal dihapus: " + storageErr.message, "error"); }
+  }
   manageDesign(currentDesignEventId);
 }
 
@@ -794,7 +815,7 @@ function closeLightbox() {
 
 function escapeHtml(s) {
   return String(s == null ? "" : s)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 // ---------- Delegated click untuk panel admin ----------
@@ -806,12 +827,12 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "createEvent") createEvent();
   else if (a === "editEvent") editEvent(el.dataset.id, el.dataset.nama, el.dataset.ket, el.dataset.mode);
   else if (a === "copyLink") copyLink(el.dataset.id);
-  else if (a === "toggleEvent") toggleEvent(el.dataset.id, el.dataset.aktif === "true");
+  else if (a === "toggleEvent") toggleEvent(el.dataset.id, el.dataset.aktif !== "true");
   else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
   else if (a === "manageVilla") manageVilla(el.dataset.id);
   else if (a === "manageDesign") manageDesign(el.dataset.id);
   else if (a === "addDesign") addDesign();
-  else if (a === "deleteDesign") deleteDesign(el.dataset.id);
+  else if (a === "deleteDesign") deleteDesign(el.dataset.id, el.dataset.path);
   else if (a === "addVilla") addVilla();
   else if (a === "editVilla") editVilla(el.dataset.id);
   else if (a === "deleteVilla") deleteVilla(el.dataset.id);
