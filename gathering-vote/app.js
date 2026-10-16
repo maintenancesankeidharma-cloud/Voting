@@ -34,6 +34,7 @@ function router() {
     const id = hash.split("/")[2];
     if (id) { openEvent(id); return; }
   }
+  if (hash.startsWith("/penginapan")) { renderPenginapan(); return; }
   renderHome();
 }
 window.addEventListener("hashchange", router);
@@ -44,6 +45,7 @@ function goHome() { location.hash = "#/"; }
 async function renderHome() {
   document.getElementById("viewHome").style.display = "block";
   document.getElementById("viewEvent").style.display = "none";
+  document.getElementById("viewPenginapan").style.display = "none";
   const list = document.getElementById("eventList");
   const note = document.getElementById("homeNote");
 
@@ -87,6 +89,7 @@ async function renderHome() {
 async function openEvent(id) {
   document.getElementById("viewHome").style.display = "none";
   document.getElementById("viewEvent").style.display = "block";
+  document.getElementById("viewPenginapan").style.display = "none";
   document.getElementById("totalText").textContent = "Memuat...";
   currentEventId = id;
 
@@ -130,8 +133,8 @@ async function openEvent(id) {
   document.getElementById("dashKehadiran").style.display = (isGambar || isOpsi) ? "none" : "block";
   document.getElementById("gambarPanel").style.display =isGambar ? "block" : "none";
   document.getElementById("opsiPanel").style.display = isOpsi ? "block" : "none";
+  document.getElementById("panelVote").style.display = "block";
 
-  switchTab("vote");
   if (isGambar) {
     loadGambar();
   } else if (isOpsi) {
@@ -294,31 +297,32 @@ async function loadDashboard() {
     .join("");
 }
 
-// ---------- TAB & VILLA ----------
-function switchTab(tab) {
-  document.getElementById("tabVoteBtn").classList.toggle("active", tab === "vote");
-  document.getElementById("tabVillaBtn").classList.toggle("active", tab === "villa");
-  document.getElementById("panelVote").style.display = tab === "vote" ? "block" : "none";
-  document.getElementById("panelVilla").style.display = tab === "villa" ? "block" : "none";
-  if (tab === "villa") loadVilla();
+// ---------- PENGINAPAN (GLOBAL, terpisah dari event) ----------
+async function renderPenginapan() {
+  document.getElementById("viewHome").style.display = "none";
+  document.getElementById("viewEvent").style.display = "none";
+  document.getElementById("viewPenginapan").style.display = "block";
+  await loadVillaGlobal();
 }
 
-async function loadVilla() {
+async function loadVillaGlobal() {
   const grid = document.getElementById("villaGrid");
   const note = document.getElementById("villaNote");
   const client = getSupabase();
   if (!client) { note.textContent = "Supabase belum dikonfigurasi."; grid.innerHTML = ""; return; }
 
-  const { data, error } = await client
-    .from("villa")
-    .select("id,nama,foto_url,fasilitas,harga")
-    .eq("event_id", currentEventId)
-    .order("created_at", { ascending: true });
+  const [villaRes, evRes] = await Promise.all([
+    client.from("villa").select("id,nama,foto_url,fasilitas,harga,event_id").order("created_at", { ascending: true }),
+    client.from("events").select("id,nama"),
+  ]);
 
-  if (error) { note.textContent = "Gagal memuat: " + (error.message || error); grid.innerHTML = ""; return; }
+  if (villaRes.error) { note.textContent = "Gagal memuat: " + (villaRes.error.message || villaRes.error); grid.innerHTML = ""; return; }
 
-  const rows = data || [];
-  note.textContent = rows.length ? rows.length + " pilihan penginapan." : "Belum ada penginapan untuk event ini.";
+  const evMap = {};
+  (evRes.data || []).forEach((e) => { evMap[e.id] = e.nama; });
+
+  const rows = villaRes.data || [];
+  note.textContent = rows.length ? rows.length + " pilihan penginapan." : "Belum ada data penginapan.";
   if (!rows.length) { grid.innerHTML = '<div class="empty">Belum ada data penginapan.</div>'; return; }
 
   grid.innerHTML = rows.map((v) =>
@@ -326,6 +330,7 @@ async function loadVilla() {
     (v.foto_url ? '<img src="' + escapeHtml(v.foto_url) + '" alt="' + escapeHtml(v.nama) + '" onclick="openLightbox(this.src)" onerror="villaImgError(this)" />' : '<div class="vc-noimg">Tanpa gambar</div>') +
     '<div class="vc-body">' +
     '<div class="vc-name">' + escapeHtml(v.nama) + "</div>" +
+    (v.event_id && evMap[v.event_id] ? '<div class="gc-count">📅 ' + escapeHtml(evMap[v.event_id]) + "</div>" : "") +
     (v.fasilitas ? '<div class="vc-fas">' + escapeHtml(v.fasilitas) + "</div>" : "") +
     (v.harga ? '<div class="vc-price">' + escapeHtml(v.harga) + "</div>" : "") +
     "</div></div>"
@@ -907,7 +912,6 @@ async function renderAdmin() {
         '<button type="button" class="btn btn-sm" data-action="editEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '" data-ket="' + escapeHtml(e.keterangan || "") + '" data-mode="' + (e.mode || "kehadiran") + '">Edit</button>' +
         (e.mode === "gambar" ? '<button type="button" class="btn btn-sm" data-action="manageDesign" data-id="' + e.id + '">Design</button>' : "") +
         (e.mode === "opsi" ? '<button type="button" class="btn btn-sm" data-action="manageOpsi" data-id="' + e.id + '">Opsi</button>' : "") +
-        '<button type="button" class="btn btn-sm" data-action="manageVilla" data-id="' + e.id + '">Penginapan</button>' +
         '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">Salin Link</button>' +
         '<button type="button" class="btn btn-sm" data-action="setTotalMembers" data-id="' + e.id + '">Total Members</button>' +
         '<button type="button" class="btn btn-sm ' + (e.aktif ? "btn-danger" : "btn-success") + '" data-action="toggleEvent" data-id="' + e.id + '" data-aktif="' + (e.aktif ? "true" : "false") + '">' +
@@ -918,6 +922,7 @@ async function renderAdmin() {
     .join("");
 
   body.innerHTML =
+    '<button type="button" class="btn" data-action="manageVillaGlobal" style="margin-bottom:18px;">🏠 Kelola Katalog Penginapan</button>' +
     '<div class="dashboard-note" id="evFormNote">Buat event baru.</div>' +
     '<div class="form-group"><label for="evNama">Nama Event</label>' +
     '<input type="text" id="evNama" placeholder="Contoh: Gathering Tahunan 2026" /></div>' +
@@ -1003,20 +1008,18 @@ async function deleteEvent(id, nama) {
   renderAdmin();
 }
 
-// ---------- ADMIN: KELOLA VILLA (penginapan) ----------
-let currentAdminEventId = null;
+// ---------- ADMIN: KELOLA VILLA (penginapan, global) ----------
 let currentVillaId = null;
 let currentEditEventId = null;
 
-async function manageVilla(eventId) {
-  currentAdminEventId = eventId;
+async function manageVilla() {
   currentVillaId = null;
   const body = document.getElementById("adminBody");
   const client = getSupabase();
   if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
 
-  const { data: ev } = await client.from("events").select("nama").eq("id", eventId).single();
-  const { data, error } = await client.from("villa").select("id,nama,foto_url,fasilitas,harga").eq("event_id", eventId).order("created_at", { ascending: true });
+  const { data, error } = await client.from("villa").select("id,nama,foto_url,fasilitas,harga").order("created_at", { ascending: true });
+  if (error) { body.innerHTML = '<div class="empty">Gagal memuat: ' + escapeHtml(error.message || String(error)) + "</div>"; return; }
 
   const rows = (data || []).map((v) =>
     '<div class="admin-row">' +
@@ -1030,9 +1033,10 @@ async function manageVilla(eventId) {
   ).join("");
 
   body.innerHTML =
-    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
-    '<h2 style="font-size:1.1rem;margin-bottom:4px;">🏠  Penginapan: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
-    '<div class="dashboard-note" id="villaFormNote">Tambah katalog villa untuk event ini.</div>' +
+    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali</button>' +
+    '<h2 style="font-size:1.1rem;margin-bottom:4px;">🏠 Katalog Penginapan</h2>' +
+    '<div class="dashboard-note">Katalog ini terpisah dari event dan tampil untuk semua kegiatan.</div>' +
+    '<div class="dashboard-note" id="villaFormNote">Tambah pilihan penginapan.</div>' +
     '<div class="form-group"><label for="vNama">Nama Villa</label><input type="text" id="vNama" placeholder="Contoh: Villa Melati" /></div>' +
     '<div class="form-group"><label for="vFoto">URL Foto</label><input type="text" id="vFoto" placeholder="https://gambar.example.com/villa.jpg" /></div>' +
     '<div class="form-group"><label for="vFas">Fasilitas (pisahkan dengan baris baru)</label><textarea id="vFas" placeholder="Kapasitas 10 orang&#10;Kolam renang&#10;Dapur lengkap"></textarea></div>' +
@@ -1067,10 +1071,10 @@ async function addVilla() {
     const { error } = await client.from("villa").update({ nama, foto_url: foto, fasilitas: fas, harga }).eq("id", currentVillaId);
     if (error) { adminMsg("Gagal update: " + error.message, "error"); return; }
   } else {
-    const { error } = await client.from("villa").insert({ event_id: currentAdminEventId, nama, foto_url: foto, fasilitas: fas, harga });
+    const { error } = await client.from("villa").insert({ nama, foto_url: foto, fasilitas: fas, harga });
     if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
   }
-  manageVilla(currentAdminEventId);
+  manageVilla();
 }
 
 async function deleteVilla(id) {
@@ -1078,7 +1082,7 @@ async function deleteVilla(id) {
   const client = getSupabase();
   const { error } = await client.from("villa").delete().eq("id", id);
   if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
-  manageVilla(currentAdminEventId);
+  manageVilla();
 }
 
 function villaImgError(img) {
@@ -1112,7 +1116,8 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "copyLink") copyLink(el.dataset.id);
   else if (a === "toggleEvent") toggleEvent(el.dataset.id, el.dataset.aktif !== "true");
   else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
-  else if (a === "manageVilla") manageVilla(el.dataset.id);
+  else if (a === "manageVillaGlobal") manageVilla();
+  else if (a === "manageVilla") manageVilla();
   else if (a === "manageDesign") manageDesign(el.dataset.id);
   else if (a === "manageOpsi") manageOpsi(el.dataset.id);
   else if (a === "addOpsi") addOpsi();

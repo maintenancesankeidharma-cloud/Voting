@@ -353,6 +353,30 @@
       <h2>📅 Daftar Kegiatan / Event</h2>
       <div class="dashboard-note" id="homeNote">Memuat daftar event...</div>
       <div class="event-list" id="eventList"></div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:22px 0;" />
+      <h2>🏠 Katalog Penginapan</h2>
+      <div class="dashboard-note">Daftar penginapan (terpisah dari kegiatan).</div>
+      <div class="event-card" onclick="location.hash='#/penginapan'">
+        <div class="ec-body">
+          <div class="ec-name">🏠 Lihat Katalog Penginapan</div>
+          <div class="ec-desc">Daftar pilihan penginapan dari semua kegiatan</div>
+        </div>
+        <div class="ec-arrow">›</div>
+      </div>
+    </div>
+
+    <!-- PENGINAPAN (GLOBAL) -->
+    <div class="card" id="viewPenginapan" style="display:none;">
+      <div class="topbar">
+        <button class="btn-back" onclick="goHome()">← Kembali</button>
+        <div class="event-title">
+          <h2>🏠 Katalog Penginapan</h2>
+          <div class="keterangan">Daftar penginapan dari semua kegiatan</div>
+        </div>
+      </div>
+      <div class="dashboard-note" id="villaNote">Memuat katalog penginapan...</div>
+      <div class="villa-grid" id="villaGrid"></div>
     </div>
 
     <!-- EVENT: FORM + DASHBOARD -->
@@ -363,11 +387,6 @@
           <h2 id="evTitle">...</h2>
           <div class="keterangan" id="evDesc"></div>
         </div>
-      </div>
-
-      <div class="tabs">
-        <button type="button" class="tab active" id="tabVoteBtn" onclick="switchTab('vote')">🗳️ Voting</button>
-        <button type="button" class="tab" id="tabVillaBtn" onclick="switchTab('villa')">🏠 Penginapan</button>
       </div>
 
       <!-- TAB VOTING -->
@@ -513,12 +532,6 @@
         </div>
       </div>
       </div><!-- /panelVote -->
-
-      <!-- TAB PENGINAPAN -->
-      <div id="panelVilla" style="display:none;">
-        <div class="dashboard-note" id="villaNote">Memuat katalog penginapan...</div>
-        <div class="villa-grid" id="villaGrid"></div>
-      </div>
     </div>
 
     <footer>Voting Dashboard &bull; Diperbarui otomatis</footer>
