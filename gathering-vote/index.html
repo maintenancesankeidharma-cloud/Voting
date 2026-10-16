@@ -472,6 +472,43 @@
           </table>
         </div>
       </div>
+      <!-- PANEL VOTING OPSI (beberapa pilihan teks, 1 orang 1 suara) -->
+      <div id="opsiPanel" style="display:none;">
+        <h2 style="font-size:1rem;">🗳️ Pilih Opsi</h2>
+        <div class="dashboard-note" id="opsiMsg"></div>
+        <div class="form-group" style="max-width:360px;">
+          <label for="oVoteNama">Nama Anda</label>
+          <input type="text" id="oVoteNama" placeholder="Masukkan nama kamu" autocomplete="name" required />
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;" />
+
+        <h2>📊 Hasil Voting Opsi</h2>
+        <div class="voter-summary" id="ovoterSummary">0 dari 0 member telah memilih</div>
+        <div class="dashboard-note" id="oNote">Memuat...</div>
+        <div class="form-group" style="max-width:320px;">
+          <label for="oSort">Urutkan opsi</label>
+          <select id="oSort" onchange="loadOpsi()">
+            <option value="terbanyak">Pilihan terbanyak</option>
+            <option value="terbaru">Terbaru dibuat</option>
+            <option value="nama">Nama opsi (A–Z)</option>
+          </select>
+        </div>
+        <div class="gallery" id="oGallery"></div>
+
+        <h2 style="font-size:1rem; margin-top:24px;">👥 Daftar Pemilih</h2>
+        <div class="dashboard-note" id="oVoterListNote">Belum ada yang memilih.</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Nama</th><th>Pilihan Opsi</th><th>Waktu</th></tr>
+            </thead>
+            <tbody id="oVoterTable">
+              <tr><td colspan="3" class="empty">Belum ada yang memilih.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
       </div><!-- /panelVote -->
 
       <!-- TAB PENGINAPAN -->

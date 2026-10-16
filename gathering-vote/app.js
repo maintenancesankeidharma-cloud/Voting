@@ -109,7 +109,7 @@ async function openEvent(id) {
   document.getElementById("evTitle").textContent = data.nama;
   document.getElementById("evDesc").textContent = data.keterangan || "";
 
-  currentEventMode = data.mode === "gambar" ? "gambar" : "kehadiran";
+  currentEventMode = (data.mode === "gambar" || data.mode === "opsi") ? data.mode : "kehadiran";
 
   // reset form
   document.getElementById("voteForm").reset();
@@ -119,15 +119,21 @@ async function openEvent(id) {
   );
   document.getElementById("gVoteNama").value = "";
   document.getElementById("gambarMsg").textContent = "";
+  document.getElementById("oVoteNama").value = "";
+  document.getElementById("opsiMsg").textContent = "";
 
   const isGambar = currentEventMode === "gambar";
-  document.getElementById("formKehadiran").style.display = isGambar ? "none" : "block";
-  document.getElementById("dashKehadiran").style.display = isGambar ? "none" : "block";
+  const isOpsi = currentEventMode === "opsi";
+  document.getElementById("formKehadiran").style.display = (isGambar || isOpsi) ? "none" : "block";
+  document.getElementById("dashKehadiran").style.display = (isGambar || isOpsi) ? "none" : "block";
   document.getElementById("gambarPanel").style.display =isGambar ? "block" : "none";
+  document.getElementById("opsiPanel").style.display = isOpsi ? "block" : "none";
 
   switchTab("vote");
   if (isGambar) {
     loadGambar();
+  } else if (isOpsi) {
+    loadOpsi();
   } else {
     loadDashboard();
   }
@@ -459,6 +465,144 @@ async function voteGambar(uploadId) {
   loadGambar();
 }
 
+// ---------- VOTING OPSI (beberapa pilihan teks, 1 orang 1 suara) ----------
+async function loadOpsi() {
+  const client = getSupabase();
+  const gal = document.getElementById("oGallery");
+  const note = document.getElementById("oNote");
+  const sum = document.getElementById("ovoterSummary");
+  if (!gal || !note || !sum) return;
+
+  if (!client) { note.textContent = "Supabase belum dikonfigurasi."; return; }
+
+  const [optsRes, votesRes] = await Promise.all([
+    client.from("opsi_options").select("id,nama,keterangan,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
+    client.from("opsi_votes").select("id,option_id,nama,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
+  ]);
+
+  if (optsRes.error) {
+    const msg = String(optsRes.error.message || optsRes.error);
+    if (msg.includes("opsi_options") || optsRes.error.code === "42P01") {
+      note.textContent = "Tabel opsi belum ada. Jalankan supabase-schema.sql terbaru di Supabase SQL Editor.";
+    } else {
+      note.textContent = "Gagal: " + msg;
+    }
+    return;
+  }
+  if (votesRes.error) { note.textContent = "Gagal: " + (votesRes.error.message || votesRes.error); return; }
+
+  const options = optsRes.data || [];
+  const votes = votesRes.data || [];
+  const countMap = {};
+  const votersByOption = {};
+  votes.forEach((v) => {
+    countMap[v.option_id] = (countMap[v.option_id] || 0) + 1;
+    (votersByOption[v.option_id] = votersByOption[v.option_id] || []).push(v.nama);
+  });
+
+  const sortMode = (document.getElementById("oSort") && document.getElementById("oSort").value) || "terbanyak";
+  options.sort((a, b) => {
+    if (sortMode === "terbanyak") return (countMap[b.id] || 0) - (countMap[a.id] || 0);
+    if (sortMode === "terbaru") return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    return String(a.nama).localeCompare(String(b.nama), "id");
+  });
+
+  const totalMembers = currentEventTotalMembers;
+  sum.textContent = totalMembers > 0
+    ? votes.length + " dari " + totalMembers + " member telah memilih (" + Math.round((votes.length / totalMembers) * 100) + "%)"
+    : votes.length + " member telah memilih";
+
+  note.textContent = options.length ? options.length + " pilihan opsi." : "Belum ada opsi. Admin belum menambah opsi.";
+  renderOpsiVoterTable(options, votes);
+  if (!options.length) { gal.innerHTML = '<div class="empty">Belum ada opsi.</div>'; return; }
+
+  const myVoteName = (document.getElementById("oVoteNama").value || "").trim().toLowerCase();
+  const myVote = myVoteName ? votes.find((v) => String(v.nama || "").toLowerCase() === myVoteName) : null;
+  const totalVotes = votes.length || 1;
+
+  gal.innerHTML = options.map((o) => {
+    const cnt = countMap[o.id] || 0;
+    const pct = Math.round((cnt / totalVotes) * 100);
+    let label = "Pilih";
+    let btnDisabled = !myVoteName;
+    if (myVote) {
+      if (myVote.option_id === o.id) { label = "✓ Pilihan Anda"; btnDisabled = true; }
+      else { label = "Ganti ke ini"; btnDisabled = false; }
+    }
+    const names = votersByOption[o.id] || [];
+    const namesHtml = names.length
+      ? '<div class="gc-voters">👤 ' + names.map(escapeHtml).join(", ") + "</div>"
+      : '<div class="gc-voters muted">Belum ada yang memilih</div>';
+    return (
+      '<div class="g-card">' +
+      '<div class="gc-body">' +
+      '<div class="gc-nama">' + escapeHtml(o.nama) + "</div>" +
+      (o.keterangan ? '<div class="gc-count">' + escapeHtml(o.keterangan) + "</div>" : "") +
+      '<div class="gc-count">' + cnt + " suara (" + pct + "%)</div>" +
+      '<div class="bar-track" style="height:10px;"><div class="bar-fill fill-yes" style="width:' + pct + '%"></div></div>' +
+      namesHtml +
+      '<button type="button" class="gc-vote" data-option-id="' + o.id + '"' + (btnDisabled ? " disabled" : "") + '>' + label + '</button>' +
+      "</div></div>"
+    );
+  }).join("");
+}
+
+function renderOpsiVoterTable(options, votes) {
+  const tbody = document.getElementById("oVoterTable");
+  const noteEl = document.getElementById("oVoterListNote");
+  if (!tbody) return;
+  const nameMap = {};
+  options.forEach((o) => { nameMap[o.id] = o.nama; });
+  if (!votes.length) {
+    if (noteEl) noteEl.textContent = "Belum ada yang memilih.";
+    tbody.innerHTML = '<tr><td colspan="3" class="empty">Belum ada yang memilih.</td></tr>';
+    return;
+  }
+  if (noteEl) noteEl.textContent = votes.length + " orang sudah memilih.";
+  tbody.innerHTML = votes.map((v) => {
+    const time = v.created_at
+      ? new Date(v.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+      : "–";
+    return "<tr><td>" + escapeHtml(v.nama) + "</td><td>" + escapeHtml(nameMap[v.option_id] || "-") + "</td><td>" + time + "</td></tr>";
+  }).join("");
+}
+
+async function voteOpsi(optionId) {
+  const nama = (document.getElementById("oVoteNama").value || "").trim();
+  if (!nama) { alert("Isi nama Anda dulu untuk memilih opsi."); return; }
+  const client = getSupabase();
+  if (!client) return;
+
+  const { data: existingVotes, error: dupErr } = await client
+    .from("opsi_votes").select("id,nama")
+    .eq("event_id", currentEventId)
+    .limit(500);
+  if (dupErr) { alert("Gagal memeriksa pilihan: " + (dupErr.message || dupErr)); return; }
+  const mine = (existingVotes || []).find(
+    (v) => String(v.nama || "").trim().toLowerCase() === nama.toLowerCase()
+  );
+
+  if (mine) {
+    if (mine.option_id === optionId) { alert("Ini sudah pilihan Anda."); return; }
+    if (!confirm("Anda sudah pernah memilih. Ganti pilihan ke opsi ini?")) return;
+    const { error: delErr } = await client.from("opsi_votes").delete().eq("id", mine.id);
+    if (delErr) { alert("Gagal mengganti: " + (delErr.message || delErr)); return; }
+  }
+
+  const { error } = await client.from("opsi_votes").insert({ event_id: currentEventId, option_id: optionId, nama });
+  if (error) {
+    const msg = String(error.message || error);
+    if (error.code === "23505" || msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("unique")) {
+      alert("Nama ini sudah pernah memilih.");
+    } else {
+      alert("Gagal memilih: " + msg);
+    }
+    return;
+  }
+  alert(mine ? "Pilihan berhasil diganti!" : "Pilihan tersimpan. Terima kasih!");
+  loadOpsi();
+}
+
 // ---------- ADMIN: KELOLA DESIGN ----------
 let currentDesignEventId = null;
 
@@ -524,6 +668,75 @@ async function deleteDesign(id, fotoPath) {
     if (storageErr) { adminMsg("Data terhapus, tapi file gambar gagal dihapus: " + storageErr.message, "error"); }
   }
   manageDesign(currentDesignEventId);
+}
+
+// ---------- ADMIN: KELOLA OPSI ----------
+let currentOpsiEventId = null;
+
+async function manageOpsi(eventId) {
+  currentOpsiEventId = eventId;
+  const body = document.getElementById("adminBody");
+  const client = getSupabase();
+  if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
+
+  const { data: ev } = await client.from("events").select("nama").eq("id", eventId).single();
+  const { data, error } = await client.from("opsi_options").select("id,nama,keterangan").eq("event_id", eventId).order("created_at", { ascending: true });
+  if (error) {
+    const msg = String(error.message || error);
+    if (msg.includes("opsi_options") || error.code === "42P01") {
+      body.innerHTML =
+        '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
+        '<div class="message error" style="display:block;">Tabel opsi belum ada. Jalankan <b>supabase-schema.sql</b> terbaru di Supabase SQL Editor, lalu buka lagi.</div>';
+      return;
+    }
+    body.innerHTML = '<div class="empty">' + escapeHtml(msg) + "</div>";
+    return;
+  }
+
+  const rows = (data || []).map((o) =>
+    '<div class="admin-row">' +
+    '<div class="ar-name">' + escapeHtml(o.nama) +
+    (o.keterangan ? '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' + escapeHtml(o.keterangan) + "</div>" : "") +
+    "</div>" +
+    '<div class="ar-actions"><button type="button" class="btn btn-sm btn-danger" data-action="deleteOpsi" data-id="' + o.id + '">Hapus</button></div>' +
+    "</div>"
+  ).join("");
+
+  body.innerHTML =
+    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
+    '<h2 style="font-size:1.1rem;margin-bottom:4px;">🗳️ Opsi: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
+    '<div class="dashboard-note">Tambah beberapa pilihan untuk dipilih peserta (1 orang 1 suara, bisa ganti).</div>' +
+    '<div class="form-group"><label for="oNama">Nama Opsi</label><input type="text" id="oNama" placeholder="Contoh: Villa A - Puncak" /></div>' +
+    '<div class="form-group"><label for="oKet">Keterangan (opsional)</label><input type="text" id="oKet" placeholder="Contoh: Rp 2 jt/malam, kapasitas 15" /></div>' +
+    '<button type="button" class="btn" id="opsiSubmitBtn" data-action="addOpsi">Tambah Opsi</button>' +
+    '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Opsi</h3>' +
+    (rows || '<div class="empty">Belum ada opsi.</div>') + "</div>";
+}
+
+async function addOpsi() {
+  const nama = document.getElementById("oNama").value.trim();
+  const keterangan = document.getElementById("oKet").value.trim();
+  if (!nama) { adminMsg("Nama opsi wajib diisi.", "error"); return; }
+  const client = getSupabase();
+  const { error } = await client.from("opsi_options").insert({ event_id: currentOpsiEventId, nama, keterangan });
+  if (error) {
+    const msg = String(error.message || error);
+    if (error.code === "23505" || msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("unique")) {
+      adminMsg("Nama opsi ini sudah ada untuk event ini.", "error");
+    } else {
+      adminMsg("Gagal: " + msg, "error");
+    }
+    return;
+  }
+  manageOpsi(currentOpsiEventId);
+}
+
+async function deleteOpsi(id) {
+  if (!confirm("Hapus opsi ini beserta suaranya?")) return;
+  const client = getSupabase();
+  const { error } = await client.from("opsi_options").delete().eq("id", id);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  manageOpsi(currentOpsiEventId);
 }
 
 // ---------- ADMIN ----------
@@ -620,11 +833,12 @@ async function renderAdmin() {
         '<div class="admin-row">' +
         '<div class="ar-name">' + escapeHtml(e.nama) +
         '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' +
-        (e.mode === "gambar" ? "Voting Gambar" : "Voting Kehadiran") + " &bull; " +
+        (e.mode === "gambar" ? "Voting Gambar" : e.mode === "opsi" ? "Voting Opsi" : "Voting Kehadiran") + " &bull; " +
         (e.aktif ? "Aktif" : "Nonaktif") + "</div></div>" +
 '<div class="ar-actions">' +
         '<button type="button" class="btn btn-sm" data-action="editEvent" data-id="' + e.id + '" data-nama="' + escapeHtml(e.nama) + '" data-ket="' + escapeHtml(e.keterangan || "") + '" data-mode="' + (e.mode || "kehadiran") + '">Edit</button>' +
         (e.mode === "gambar" ? '<button type="button" class="btn btn-sm" data-action="manageDesign" data-id="' + e.id + '">Design</button>' : "") +
+        (e.mode === "opsi" ? '<button type="button" class="btn btn-sm" data-action="manageOpsi" data-id="' + e.id + '">Opsi</button>' : "") +
         '<button type="button" class="btn btn-sm" data-action="manageVilla" data-id="' + e.id + '">Penginapan</button>' +
         '<button type="button" class="btn btn-sm" data-action="copyLink" data-id="' + e.id + '">Salin Link</button>' +
         '<button type="button" class="btn btn-sm" data-action="setTotalMembers" data-id="' + e.id + '">Total Members</button>' +
@@ -645,6 +859,7 @@ async function renderAdmin() {
     '<select id="evMode">' +
     '<option value="kehadiran">Voting Kehadiran (Ya / Tidak)</option>' +
     '<option value="gambar">Voting Gambar (Upload & Vote)</option>' +
+    '<option value="opsi">Voting Opsi (beberapa pilihan)</option>' +
     '</select></div>' +
     '<button type="button" class="btn" id="evSubmitBtn" data-action="createEvent">Buat Event</button>' +
     '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Event</h3>' +
@@ -831,6 +1046,9 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "deleteEvent") deleteEvent(el.dataset.id, el.dataset.nama);
   else if (a === "manageVilla") manageVilla(el.dataset.id);
   else if (a === "manageDesign") manageDesign(el.dataset.id);
+  else if (a === "manageOpsi") manageOpsi(el.dataset.id);
+  else if (a === "addOpsi") addOpsi();
+  else if (a === "deleteOpsi") deleteOpsi(el.dataset.id);
   else if (a === "addDesign") addDesign();
   else if (a === "deleteDesign") deleteDesign(el.dataset.id, el.dataset.path);
   else if (a === "addVilla") addVilla();
@@ -848,5 +1066,13 @@ document.getElementById("gGallery").addEventListener("click", function (ev) {
 });
 document.getElementById("gVoteNama").addEventListener("input", function () {
   if (currentEventMode === "gambar") loadGambar();
+});
+document.getElementById("oGallery").addEventListener("click", function (ev) {
+  const el = ev.target.closest("[data-option-id]");
+  if (!el) return;
+  voteOpsi(el.dataset.optionId);
+});
+document.getElementById("oVoteNama").addEventListener("input", function () {
+  if (currentEventMode === "opsi") loadOpsi();
 });
 router();

@@ -55,6 +55,40 @@ create table if not exists public.gambar_votes (
   created_at timestamptz not null default now()
 );
 
+-- 5) Tabel voting opsi (1 orang pilih 1 dari beberapa opsi teks)
+create table if not exists public.opsi_options (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid references public.events (id) on delete cascade,
+  nama text not null,
+  keterangan text default '',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.opsi_votes (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid references public.events (id) on delete cascade,
+  option_id uuid references public.opsi_options (id) on delete cascade,
+  nama text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.opsi_options enable row level security;
+alter table public.opsi_votes enable row level security;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'opsi_votes_event_nama_unique') then
+    alter table public.opsi_votes add constraint opsi_votes_event_nama_unique unique(event_id, nama);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'opsi_options_event_nama_unique') then
+    alter table public.opsi_options add constraint opsi_options_event_nama_unique unique(event_id, nama);
+  end if;
+end $$;
+
 alter table public.gambar_uploads enable row level security;
 alter table public.gambar_votes enable row level security;
 
@@ -155,6 +189,26 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename = 'villa'and policyname = 'allow public delete') then
     create policy "allow public delete" on public.villa for delete using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where tablename = 'opsi_options'and policyname = 'allow public select') then
+    create policy "allow public select" on public.opsi_options for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'opsi_options'and policyname = 'allow public insert') then
+    create policy "allow public insert" on public.opsi_options for insert with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'opsi_options'and policyname = 'allow public delete') then
+    create policy "allow public delete" on public.opsi_options for delete using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where tablename = 'opsi_votes'and policyname = 'allow public select') then
+    create policy "allow public select" on public.opsi_votes for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'opsi_votes'and policyname = 'allow public insert') then
+    create policy "allow public insert" on public.opsi_votes for insert with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'opsi_votes'and policyname = 'allow public delete') then
+    create policy "allow public delete" on public.opsi_votes for delete using (true);
   end if;
 
   if not exists (select 1 from pg_policies where tablename = 'gambar_uploads'and policyname = 'allow public select') then
