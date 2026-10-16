@@ -95,14 +95,14 @@ alter table public.gambar_votes enable row level security;
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'gambar_votes_event_nama_unique') then
-    alter table public.gambar_votes add constraint gambar_votes_event_nama_unique unique(event_id, nama;
+    alter table public.gambar_votes add constraint gambar_votes_event_nama_unique unique(event_id, nama);
   end if;
 end $$;
 
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'gambar_uploads_event_nama_unique') then
-    alter table public.gambar_uploads add constraint gambar_uploads_event_nama_unique unique(event_id, nama;
+    alter table public.gambar_uploads add constraint gambar_uploads_event_nama_unique unique(event_id, nama);
   end if;
 end $$;
 
@@ -138,7 +138,7 @@ alter table public.responses
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'responses_event_nama_unique') then
-    alter table public.responses add constraint responses_event_nama_unique unique(event_id, nama;
+    alter table public.responses add constraint responses_event_nama_unique unique(event_id, nama);
   end if;
 end $$;
 
