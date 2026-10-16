@@ -808,7 +808,10 @@ async function manageOpsi(eventId) {
       '<div><h3 style="font-size:0.98rem;margin-bottom:2px;">' + (qi + 1) + ". " + escapeHtml(q.pertanyaan) + "</h3>" +
       (q.keterangan ? '<div style="font-size:0.78rem;color:var(--muted);">' + escapeHtml(q.keterangan) + "</div>" : "") +
       "</div>" +
+      '<div style="display:flex;gap:6px;">' +
+      '<button type="button" class="btn btn-sm" style="width:auto;" data-action="editOpsiQuestion" data-id="' + q.id + '" data-nama="' + escapeHtml(q.pertanyaan) + '">Ubah</button>' +
       '<button type="button" class="btn btn-sm btn-danger" data-action="deleteOpsiQuestion" data-id="' + q.id + '" style="width:auto;">Hapus</button>' +
+      "</div>" +
       "</div>" +
       imgHtml +
       '<div class="form-group" style="margin:8px 0;"><label>Gambar pertanyaan (opsional)</label><input type="file" id="qFile_' + q.id + '" accept="image/*" /></div>' +
@@ -862,6 +865,18 @@ async function addOpsiQuestion() {
   } catch (err) {
     adminMsg("Gagal: " + (err.message || err), "error");
   }
+}
+
+async function editOpsiQuestion(id, nama) {
+  const baru = prompt("Ubah nama pertanyaan:", nama || "");
+  if (baru === null) return;
+  const pertanyaan = baru.trim();
+  if (!pertanyaan) { adminMsg("Nama pertanyaan tidak boleh kosong.", "error"); return; }
+  const client = getSupabase();
+  if (!client) return;
+  const { error } = await client.from("opsi_questions").update({ pertanyaan }).eq("id", id);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  manageOpsi(currentOpsiEventId);
 }
 
 async function deleteOpsiQuestion(id) {
@@ -1281,6 +1296,7 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "manageDesign") manageDesign(el.dataset.id);
   else if (a === "manageOpsi") manageOpsi(el.dataset.id);
   else if (a === "addOpsiQuestion") addOpsiQuestion();
+  else if (a === "editOpsiQuestion") editOpsiQuestion(el.dataset.id, el.dataset.nama);
   else if (a === "deleteOpsiQuestion") deleteOpsiQuestion(el.dataset.id);
   else if (a === "addOpsiOption") addOpsiOption(el.dataset.id);
   else if (a === "attachOpsiOptions") attachOpsiOptions(el.dataset.id);
