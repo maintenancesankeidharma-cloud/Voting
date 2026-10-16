@@ -13,6 +13,8 @@ async function loadEventTotalMembers() {
 }
 let currentEventMode = "kehadiran";
 let currentEventFotoPath = "";
+let opsiSelection = {};
+let lastOpsi = null;
 let adminAuthed = sessionStorage.getItem("vote_admin_auth") === "1";
 
 const STATUS_LABEL = { ya: "Ya, Hadir", tidak: "Tidak Hadir" };
@@ -126,6 +128,8 @@ async function openEvent(id) {
   document.getElementById("gambarMsg").textContent = "";
   document.getElementById("oVoteNama").value = "";
   document.getElementById("opsiMsg").textContent = "";
+  opsiSelection = {};
+  lastOpsi = null;
 
   const isGambar = currentEventMode === "gambar";
   const isOpsi = currentEventMode === "opsi";
@@ -534,6 +538,12 @@ async function loadOpsi() {
 
   if (!questions.length) { gal.innerHTML = '<div class="empty">Belum ada pertanyaan.</div>'; return; }
 
+  if (questions.length > 1) {
+    lastOpsi = { questions: questions, optMap: optMap, linksByQ: linksByQ, votesByQ: votesByQ, totalMembers: totalMembers };
+    renderOpsiMulti();
+    return;
+  }
+
   const myName = (document.getElementById("oVoteNama").value || "").trim().toLowerCase();
   const sortMode = (document.getElementById("oSort") && document.getElementById("oSort").value) || "terbanyak";
 
@@ -596,6 +606,147 @@ async function loadOpsi() {
       "</div>"
     );
   }).join("");
+}
+
+// Tampilan jawab untuk event dengan LEBIH DARI 1 pertanyaan:
+// pilih opsi per pertanyaan dulu, lalu klik "Kirim Jawaban".
+// Semua pertanyaan wajib dijawab sebelum bisa mengirim.
+function renderOpsiMulti() {
+  const gal = document.getElementById("oGallery");
+  if (!gal || !lastOpsi) return;
+  const questions = lastOpsi.questions;
+  const optMap = lastOpsi.optMap;
+  const linksByQ = lastOpsi.linksByQ;
+  const votesByQ = lastOpsi.votesByQ;
+  const totalMembers = lastOpsi.totalMembers;
+  const myName = (document.getElementById("oVoteNama").value || "").trim().toLowerCase();
+  const sortMode = (document.getElementById("oSort") && document.getElementById("oSort").value) || "terbanyak";
+
+  // Prefill pilihan dari jawaban yang sudah tersimpan (kalau nama sudah pernah menjawab)
+  if (myName) {
+    questions.forEach((q) => {
+      if (opsiSelection[q.id] === undefined) {
+        const mine = (votesByQ[q.id] || []).find((v) => String(v.nama || "").trim().toLowerCase() === myName);
+        if (mine) opsiSelection[q.id] = mine.option_id;
+      }
+    });
+  }
+
+  // Hanya pertanyaan yang punya opsi yang diwajibkan
+  const answerable = questions.filter((q) => (linksByQ[q.id] || []).length > 0);
+  let answered = 0;
+
+  const blocks = questions.map((q, qi) => {
+    const qLinks = linksByQ[q.id].slice().sort((a, b) => (a.urutan || 0) - (b.urutan || 0));
+    const qOpts = qLinks.map((l) => optMap[l.option_id]).filter(Boolean);
+    const qVotes = votesByQ[q.id] || [];
+    const countMap = {};
+    const votersByOption = {};
+    qVotes.forEach((v) => {
+      countMap[v.option_id] = (countMap[v.option_id] || 0) + 1;
+      (votersByOption[v.option_id] = votersByOption[v.option_id] || []).push(v.nama);
+    });
+    const totalVotes = qVotes.length || 1;
+    const picked = opsiSelection[q.id];
+    const isRequired = qOpts.length > 0;
+    if (picked && isRequired) answered++;
+
+    qOpts.sort((a, b) => {
+      if (sortMode === "terbanyak") return (countMap[b.id] || 0) - (countMap[a.id] || 0);
+      if (sortMode === "terbaru") return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      return String(a.nama).localeCompare(String(b.nama), "id");
+    });
+
+    const cards = qOpts.length ? qOpts.map((o) => {
+      const cnt = countMap[o.id] || 0;
+      const pct = Math.round((cnt / totalVotes) * 100);
+      const sel = picked === o.id;
+      const names = votersByOption[o.id] || [];
+      const namesHtml = names.length
+        ? '<div class="gc-voters">👤 ' + names.map(escapeHtml).join(", ") + "</div>"
+        : '<div class="gc-voters muted">Belum ada yang memilih</div>';
+      return (
+        '<div class="g-card opsi-selectable' + (sel ? " opsi-selected" : "") + '" data-question-id="' + q.id + '" data-option-id="' + o.id + '" style="cursor:pointer;' + (sel ? "outline:2px solid var(--accent,#3b82f6);" : "") + '">' +
+        '<div class="gc-body">' +
+        '<div class="gc-nama">' + (sel ? "✓ " : "") + escapeHtml(o.nama) + "</div>" +
+        (o.keterangan ? '<div class="gc-count">' + escapeHtml(o.keterangan) + "</div>" : "") +
+        '<div class="gc-count">' + cnt + " suara (" + pct + "%)</div>" +
+        '<div class="bar-track" style="height:10px;"><div class="bar-fill fill-yes" style="width:' + pct + '%"></div></div>' +
+        namesHtml +
+        "</div></div>"
+      );
+    }).join("") : '<div class="empty">Belum ada opsi untuk pertanyaan ini.</div>';
+
+    const imgHtml = q.foto_path
+      ? '<img src="' + escapeHtml(gambarPublicUrl(q.foto_path)) + '" alt="Gambar pertanyaan" style="max-width:100%;max-height:280px;border-radius:12px;display:block;margin:10px 0;cursor:zoom-in;" onclick="openLightbox(this.src)" onerror="this.style.display=\'none\'" />'
+      : "";
+
+    const statusHtml = !isRequired
+      ? '<div class="dashboard-note muted">Tidak ada opsi pada pertanyaan ini.</div>'
+      : picked
+        ? '<div class="dashboard-note" style="color:#16a34a;">✓ Sudah dijawab</div>'
+        : '<div class="dashboard-note" style="color:#dc2626;">• Belum dijawab (wajib)</div>';
+
+    return (
+      '<div class="opsi-qblock" style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px;">' +
+      '<h3 style="font-size:1rem;margin-bottom:2px;">' + (qi + 1) + ". " + escapeHtml(q.pertanyaan) + "</h3>" +
+      (q.keterangan ? '<div class="dashboard-note" style="margin-bottom:4px;">' + escapeHtml(q.keterangan) + "</div>" : "") +
+      imgHtml +
+      '<div class="dashboard-note">' + qVotes.length + " dari " + (totalMembers || "-") + " member menjawab.</div>" +
+      statusHtml +
+      '<div class="gallery">' + cards + "</div>" +
+      "</div>"
+    );
+  }).join("");
+
+  const allAnswered = answerable.length > 0 && answered === answerable.length;
+  gal.innerHTML = blocks +
+    '<div style="max-width:440px;">' +
+    '<button type="button" class="btn" data-action="submitOpsiVotes">🚀 Kirim Jawaban' +
+    (allAnswered ? "" : " (" + answered + "/" + answerable.length + ")") + "</button>" +
+    '<div class="dashboard-note">' +
+    (allAnswered ? "Semua pertanyaan sudah dijawab. Klik kirim untuk menyimpan."
+      : "Wajib menjawab semua pertanyaan sebelum bisa mengirim.") +
+    "</div></div>";
+}
+
+function selectOpsiOption(questionId, optionId) {
+  opsiSelection[questionId] = optionId;
+  renderOpsiMulti();
+}
+
+async function submitOpsiVotes() {
+  const nama = (document.getElementById("oVoteNama").value || "").trim();
+  if (!nama) { alert("Isi nama Anda dulu sebelum mengirim."); return; }
+  if (!lastOpsi || !lastOpsi.questions.length) return;
+
+  const questions = lastOpsi.questions;
+  const answerable = questions.filter((q) => (lastOpsi.linksByQ[q.id] || []).length > 0);
+  const missing = answerable.filter((q) => !opsiSelection[q.id]);
+  if (missing.length) {
+    alert("Wajib menjawab semua pertanyaan. Belum dijawab:\n- " + missing.map((q) => q.pertanyaan).join("\n- "));
+    return;
+  }
+
+  const client = getSupabase();
+  if (!client) return;
+
+  const { data: existing } = await client.from("opsi_votes").select("id,nama").eq("event_id", currentEventId).limit(1000);
+  const mineIds = (existing || [])
+    .filter((v) => String(v.nama || "").trim().toLowerCase() === nama.toLowerCase())
+    .map((v) => v.id);
+  if (mineIds.length) {
+    const { error: delErr } = await client.from("opsi_votes").delete().in("id", mineIds);
+    if (delErr) { alert("Gagal menyimpan: " + (delErr.message || delErr)); return; }
+  }
+
+  const rows = answerable.map((q) => ({ event_id: currentEventId, question_id: q.id, option_id: opsiSelection[q.id], nama }));
+  const { error } = await client.from("opsi_votes").insert(rows);
+  if (error) { alert("Gagal menyimpan: " + (error.message || error)); return; }
+
+  alert("Jawaban tersimpan. Terima kasih!");
+  opsiSelection = {};
+  loadOpsi();
 }
 
 function renderOpsiVoterTable(questions, options, votes) {
@@ -1303,6 +1454,7 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "removeOpsiOption") removeOpsiOption(el.dataset.qid, el.dataset.oid);
   else if (a === "saveQuestionImage") saveQuestionImage(el.dataset.id);
   else if (a === "removeQuestionImage") removeQuestionImage(el.dataset.id);
+  else if (a === "submitOpsiVotes") submitOpsiVotes();
   else if (a === "addDesign") addDesign();
   else if (a === "deleteDesign") deleteDesign(el.dataset.id, el.dataset.path);
   else if (a === "addVilla") addVilla();
@@ -1322,6 +1474,9 @@ document.getElementById("gVoteNama").addEventListener("input", function () {
   if (currentEventMode === "gambar") loadGambar();
 });
 document.getElementById("oGallery").addEventListener("click", function (ev) {
+  if (ev.target.closest('[data-action="submitOpsiVotes"]')) { submitOpsiVotes(); return; }
+  const card = ev.target.closest(".opsi-selectable");
+  if (card) { selectOpsiOption(card.dataset.questionId, card.dataset.optionId); return; }
   const el = ev.target.closest("[data-option-id]");
   if (!el) return;
   voteOpsi(el.dataset.questionId, el.dataset.optionId);
