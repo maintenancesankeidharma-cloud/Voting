@@ -491,13 +491,10 @@
           </table>
         </div>
       </div>
-      <!-- PANEL VOTING OPSI (beberapa pilihan teks, 1 orang 1 suara) -->
+      <!-- PANEL VOTING OPSI (bisa banyak pertanyaan, 1 orang 1 suara per pertanyaan) -->
       <div id="opsiPanel" style="display:none;">
         <h2 style="font-size:1rem;">🗳️ Pilih Opsi</h2>
         <div class="dashboard-note" id="opsiMsg"></div>
-        <div id="oQuestionBox" style="display:none; margin-bottom:20px;">
-          <img id="oQuestionImg" src="" alt="Deskripsi pertanyaan" style="max-width:100%; border-radius:12px; cursor:zoom-in;" onclick="openLightbox(this.src)" onerror="oQuestionImgError()" />
-        </div>
         <div class="form-group" style="max-width:360px;">
           <label for="oVoteNama">Nama Anda</label>
           <input type="text" id="oVoteNama" placeholder="Masukkan nama kamu" autocomplete="name" required />
@@ -516,17 +513,17 @@
             <option value="nama">Nama opsi (A–Z)</option>
           </select>
         </div>
-        <div class="gallery" id="oGallery"></div>
+        <div id="oGallery"></div>
 
         <h2 style="font-size:1rem; margin-top:24px;">👥 Daftar Pemilih</h2>
         <div class="dashboard-note" id="oVoterListNote">Belum ada yang memilih.</div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Nama</th><th>Pilihan Opsi</th><th>Waktu</th></tr>
+              <tr><th>Nama</th><th>Pertanyaan</th><th>Pilihan Opsi</th><th>Waktu</th></tr>
             </thead>
             <tbody id="oVoterTable">
-              <tr><td colspan="3" class="empty">Belum ada yang memilih.</td></tr>
+              <tr><td colspan="4" class="empty">Belum ada yang memilih.</td></tr>
             </tbody>
           </table>
         </div>

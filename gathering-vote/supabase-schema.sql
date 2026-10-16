@@ -56,7 +56,21 @@ create table if not exists public.gambar_votes (
   created_at timestamptz not null default now()
 );
 
--- 5) Tabel voting opsi (1 orang pilih 1 dari beberapa opsi teks)
+-- 5) Tabel voting opsi
+--    opsi_questions : pertanyaan (bisa lebih dari 1 per event)
+--    opsi_options   : pustaka opsi per event (bisa dipakai ulang antar pertanyaan)
+--    opsi_question_options : opsi mana saja yang dipakai di tiap pertanyaan
+--    opsi_votes     : 1 orang 1 suara per pertanyaan
+create table if not exists public.opsi_questions (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid references public.events (id) on delete cascade,
+  pertanyaan text not null,
+  keterangan text default '',
+  foto_path text default '',
+  urutan integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.opsi_options (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references public.events (id) on delete cascade,
@@ -65,21 +79,82 @@ create table if not exists public.opsi_options (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.opsi_question_options (
+  id uuid primary key default gen_random_uuid(),
+  question_id uuid references public.opsi_questions (id) on delete cascade,
+  option_id uuid references public.opsi_options (id) on delete cascade,
+  urutan integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.opsi_votes (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references public.events (id) on delete cascade,
+  question_id uuid references public.opsi_questions (id) on delete cascade,
   option_id uuid references public.opsi_options (id) on delete cascade,
   nama text not null,
   created_at timestamptz not null default now()
 );
 
+alter table public.opsi_questions enable row level security;
 alter table public.opsi_options enable row level security;
+alter table public.opsi_question_options enable row level security;
 alter table public.opsi_votes enable row level security;
+
+-- Migrasi dari struktur lama (satu pertanyaan per event):
+alter table public.opsi_votes add column if not exists question_id uuid references public.opsi_questions (id) on delete cascade;
+alter table public.opsi_questions add column if not exists urutan integer not null default 0;
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'opsi_votes_event_nama_unique') then
-    alter table public.opsi_votes add constraint opsi_votes_event_nama_unique unique(event_id, nama);
+  -- Buat pertanyaan default untuk event yang sudah punya opsi tapi belum punya pertanyaan
+  insert into public.opsi_questions (event_id, pertanyaan, urutan)
+  select distinct o.event_id, 'Pertanyaan 1', 0
+  from public.opsi_options o
+  where o.event_id is not null
+    and not exists (select 1 from public.opsi_questions q where q.event_id = o.event_id);
+
+  -- Tautkan opsi lama ke pertanyaan pertama event-nya (jika belum tertaut)
+  insert into public.opsi_question_options (question_id, option_id, urutan)
+  select q.id, o.id, 0
+  from public.opsi_options o
+  join lateral (
+    select id from public.opsi_questions
+    where event_id = o.event_id
+    order by urutan, created_at
+    limit 1
+  ) q on true
+  where not exists (select 1 from public.opsi_question_options qo where qo.option_id = o.id);
+
+  -- Isi question_id pada vote lama berdasarkan opsi-nya
+  update public.opsi_votes v
+  set question_id = qo.question_id
+  from public.opsi_question_options qo
+  where qo.option_id = v.option_id
+    and v.question_id is null;
+
+  -- Pindahkan gambar pertanyaan lama (events.foto_path) ke pertanyaan pertama
+  update public.opsi_questions q
+  set foto_path = e.foto_path
+  from public.events e
+  where e.id = q.event_id
+    and e.foto_path is not null and e.foto_path <> ''
+    and (q.foto_path is null or q.foto_path = '')
+    and q.id = (
+      select id from public.opsi_questions q2
+      where q2.event_id = e.id
+      order by urutan, created_at
+      limit 1
+    );
+end $$;
+
+do $$
+begin
+  if exists (select 1 from pg_constraint where conname = 'opsi_votes_event_nama_unique') then
+    alter table public.opsi_votes drop constraint opsi_votes_event_nama_unique;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'opsi_votes_question_nama_unique') then
+    alter table public.opsi_votes add constraint opsi_votes_question_nama_unique unique(question_id, nama);
   end if;
 end $$;
 
@@ -87,6 +162,9 @@ do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'opsi_options_event_nama_unique') then
     alter table public.opsi_options add constraint opsi_options_event_nama_unique unique(event_id, nama);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'opsi_question_options_unique') then
+    alter table public.opsi_question_options add constraint opsi_question_options_unique unique(question_id, option_id);
   end if;
 end $$;
 
@@ -202,6 +280,26 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename = 'villa'and policyname = 'allow public delete') then
     create policy "allow public delete" on public.villa for delete using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where tablename = 'opsi_questions'and policyname = 'allow public select') then
+    create policy "allow public select" on public.opsi_questions for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'opsi_questions'and policyname = 'allow public insert') then
+    create policy "allow public insert" on public.opsi_questions for insert with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'opsi_questions'and policyname = 'allow public delete') then
+    create policy "allow public delete" on public.opsi_questions for delete using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where tablename = 'opsi_question_options'and policyname = 'allow public select') then
+    create policy "allow public select" on public.opsi_question_options for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'opsi_question_options'and policyname = 'allow public insert') then
+    create policy "allow public insert" on public.opsi_question_options for insert with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'opsi_question_options'and policyname = 'allow public delete') then
+    create policy "allow public delete" on public.opsi_question_options for delete using (true);
   end if;
 
   if not exists (select 1 from pg_policies where tablename = 'opsi_options'and policyname = 'allow public select') then

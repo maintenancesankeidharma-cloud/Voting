@@ -472,7 +472,7 @@ async function voteGambar(uploadId) {
   loadGambar();
 }
 
-// ---------- VOTING OPSI (beberapa pilihan teks, 1 orang 1 suara) ----------
+// ---------- VOTING OPSI (banyak pertanyaan, 1 orang 1 suara per pertanyaan) ----------
 async function loadOpsi() {
   const client = getSupabase();
   const gal = document.getElementById("oGallery");
@@ -481,127 +481,155 @@ async function loadOpsi() {
   if (!gal || !note || !sum) return;
 
   if (!client) { note.textContent = "Supabase belum dikonfigurasi."; return; }
-  renderOpsiQuestion();
 
-  const [optsRes, votesRes] = await Promise.all([
+  const [qRes, optRes, voteRes] = await Promise.all([
+    client.from("opsi_questions").select("id,pertanyaan,keterangan,foto_path,urutan,created_at").eq("event_id", currentEventId).order("urutan", { ascending: true }).order("created_at", { ascending: true }),
     client.from("opsi_options").select("id,nama,keterangan,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
-    client.from("opsi_votes").select("id,option_id,nama,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
+    client.from("opsi_votes").select("id,question_id,option_id,nama,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
   ]);
 
-  if (optsRes.error) {
-    const msg = String(optsRes.error.message || optsRes.error);
-    if (msg.includes("opsi_options") || optsRes.error.code === "42P01") {
+  if (qRes.error) {
+    const msg = String(qRes.error.message || qRes.error);
+    if (msg.includes("opsi_questions") || qRes.error.code === "42P01") {
       note.textContent = "Tabel opsi belum ada. Jalankan supabase-schema.sql terbaru di Supabase SQL Editor.";
     } else {
       note.textContent = "Gagal: " + msg;
     }
     return;
   }
-  if (votesRes.error) { note.textContent = "Gagal: " + (votesRes.error.message || votesRes.error); return; }
+  if (optRes.error) { note.textContent = "Gagal: " + (optRes.error.message || optRes.error); return; }
+  if (voteRes.error) { note.textContent = "Gagal: " + (voteRes.error.message || voteRes.error); return; }
 
-  const options = optsRes.data || [];
-  const votes = votesRes.data || [];
-  const countMap = {};
-  const votersByOption = {};
-  votes.forEach((v) => {
-    countMap[v.option_id] = (countMap[v.option_id] || 0) + 1;
-    (votersByOption[v.option_id] = votersByOption[v.option_id] || []).push(v.nama);
-  });
+  const questions = qRes.data || [];
+  const options = optRes.data || [];
+  const votes = voteRes.data || [];
 
-  const sortMode = (document.getElementById("oSort") && document.getElementById("oSort").value) || "terbanyak";
-  options.sort((a, b) => {
-    if (sortMode === "terbanyak") return (countMap[b.id] || 0) - (countMap[a.id] || 0);
-    if (sortMode === "terbaru") return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-    return String(a.nama).localeCompare(String(b.nama), "id");
-  });
+  const qIds = questions.map((q) => q.id);
+  let links = [];
+  if (qIds.length) {
+    const { data: lk } = await client.from("opsi_question_options").select("question_id,option_id,urutan").in("question_id", qIds);
+    links = lk || [];
+  }
+
+  const optMap = {};
+  options.forEach((o) => { optMap[o.id] = o; });
+  const linksByQ = {};
+  questions.forEach((q) => { linksByQ[q.id] = []; });
+  links.forEach((l) => { if (linksByQ[l.question_id]) linksByQ[l.question_id].push(l); });
+
+  const votesByQ = {};
+  questions.forEach((q) => { votesByQ[q.id] = []; });
+  votes.forEach((v) => { (votesByQ[v.question_id] = votesByQ[v.question_id] || []).push(v); });
 
   const totalMembers = currentEventTotalMembers;
+  const distinctVoters = new Set(votes.map((v) => String(v.nama || "").trim().toLowerCase())).size;
   sum.textContent = totalMembers > 0
-    ? votes.length + " dari " + totalMembers + " member telah memilih (" + Math.round((votes.length / totalMembers) * 100) + "%)"
-    : votes.length + " member telah memilih";
+    ? distinctVoters + " dari " + totalMembers + " member telah memilih"
+    : distinctVoters + " member telah memilih";
 
-  note.textContent = options.length ? options.length + " pilihan opsi." : "Belum ada opsi. Admin belum menambah opsi.";
-  renderOpsiVoterTable(options, votes);
-  if (!options.length) { gal.innerHTML = '<div class="empty">Belum ada opsi.</div>'; return; }
+  note.textContent = questions.length
+    ? questions.length + " pertanyaan, " + options.length + " opsi."
+    : "Belum ada pertanyaan. Admin belum menambah pertanyaan.";
+  renderOpsiVoterTable(questions, options, votes);
 
-  const myVoteName = (document.getElementById("oVoteNama").value || "").trim().toLowerCase();
-  const myVote = myVoteName ? votes.find((v) => String(v.nama || "").toLowerCase() === myVoteName) : null;
-  const totalVotes = votes.length || 1;
+  if (!questions.length) { gal.innerHTML = '<div class="empty">Belum ada pertanyaan.</div>'; return; }
 
-  gal.innerHTML = options.map((o) => {
-    const cnt = countMap[o.id] || 0;
-    const pct = Math.round((cnt / totalVotes) * 100);
-    let label = "Pilih";
-    let btnDisabled = !myVoteName;
-    if (myVote) {
-      if (myVote.option_id === o.id) { label = "✓ Pilihan Anda"; btnDisabled = true; }
-      else { label = "Ganti ke ini"; btnDisabled = false; }
-    }
-    const names = votersByOption[o.id] || [];
-    const namesHtml = names.length
-      ? '<div class="gc-voters">👤 ' + names.map(escapeHtml).join(", ") + "</div>"
-      : '<div class="gc-voters muted">Belum ada yang memilih</div>';
+  const myName = (document.getElementById("oVoteNama").value || "").trim().toLowerCase();
+  const sortMode = (document.getElementById("oSort") && document.getElementById("oSort").value) || "terbanyak";
+
+  gal.innerHTML = questions.map((q, qi) => {
+    const qLinks = linksByQ[q.id].slice().sort((a, b) => (a.urutan || 0) - (b.urutan || 0));
+    const qOpts = qLinks.map((l) => optMap[l.option_id]).filter(Boolean);
+    const qVotes = votesByQ[q.id] || [];
+    const countMap = {};
+    const votersByOption = {};
+    qVotes.forEach((v) => {
+      countMap[v.option_id] = (countMap[v.option_id] || 0) + 1;
+      (votersByOption[v.option_id] = votersByOption[v.option_id] || []).push(v.nama);
+    });
+    const myVote = myName ? qVotes.find((v) => String(v.nama || "").trim().toLowerCase() === myName) : null;
+    const totalVotes = qVotes.length || 1;
+
+    qOpts.sort((a, b) => {
+      if (sortMode === "terbanyak") return (countMap[b.id] || 0) - (countMap[a.id] || 0);
+      if (sortMode === "terbaru") return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      return String(a.nama).localeCompare(String(b.nama), "id");
+    });
+
+    const cards = qOpts.length ? qOpts.map((o) => {
+      const cnt = countMap[o.id] || 0;
+      const pct = Math.round((cnt / totalVotes) * 100);
+      let label = "Pilih";
+      let btnDisabled = !myName;
+      if (myVote) {
+        if (myVote.option_id === o.id) { label = "✓ Pilihan Anda"; btnDisabled = true; }
+        else { label = "Ganti ke ini"; btnDisabled = false; }
+      }
+      const names = votersByOption[o.id] || [];
+      const namesHtml = names.length
+        ? '<div class="gc-voters">👤 ' + names.map(escapeHtml).join(", ") + "</div>"
+        : '<div class="gc-voters muted">Belum ada yang memilih</div>';
+      return (
+        '<div class="g-card">' +
+        '<div class="gc-body">' +
+        '<div class="gc-nama">' + escapeHtml(o.nama) + "</div>" +
+        (o.keterangan ? '<div class="gc-count">' + escapeHtml(o.keterangan) + "</div>" : "") +
+        '<div class="gc-count">' + cnt + " suara (" + pct + "%)</div>" +
+        '<div class="bar-track" style="height:10px;"><div class="bar-fill fill-yes" style="width:' + pct + '%"></div></div>' +
+        namesHtml +
+        '<button type="button" class="gc-vote" data-question-id="' + q.id + '" data-option-id="' + o.id + '"' + (btnDisabled ? " disabled" : "") + '>' + label + '</button>' +
+        "</div></div>"
+      );
+    }).join("") : '<div class="empty">Belum ada opsi untuk pertanyaan ini.</div>';
+
+    const imgHtml = q.foto_path
+      ? '<img src="' + escapeHtml(gambarPublicUrl(q.foto_path)) + '" alt="Gambar pertanyaan" style="max-width:100%;max-height:280px;border-radius:12px;display:block;margin:10px 0;cursor:zoom-in;" onclick="openLightbox(this.src)" onerror="this.style.display=\'none\'" />'
+      : "";
+
     return (
-      '<div class="g-card">' +
-      '<div class="gc-body">' +
-      '<div class="gc-nama">' + escapeHtml(o.nama) + "</div>" +
-      (o.keterangan ? '<div class="gc-count">' + escapeHtml(o.keterangan) + "</div>" : "") +
-      '<div class="gc-count">' + cnt + " suara (" + pct + "%)</div>" +
-      '<div class="bar-track" style="height:10px;"><div class="bar-fill fill-yes" style="width:' + pct + '%"></div></div>' +
-      namesHtml +
-      '<button type="button" class="gc-vote" data-option-id="' + o.id + '"' + (btnDisabled ? " disabled" : "") + '>' + label + '</button>' +
-      "</div></div>"
+      '<div class="opsi-qblock" style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px;">' +
+      '<h3 style="font-size:1rem;margin-bottom:2px;">' + (qi + 1) + ". " + escapeHtml(q.pertanyaan) + "</h3>" +
+      (q.keterangan ? '<div class="dashboard-note" style="margin-bottom:4px;">' + escapeHtml(q.keterangan) + "</div>" : "") +
+      imgHtml +
+      '<div class="dashboard-note">' + qVotes.length + " dari " + (totalMembers || "-") + " member menjawab.</div>" +
+      '<div class="gallery">' + cards + "</div>" +
+      "</div>"
     );
   }).join("");
 }
 
-function renderOpsiQuestion() {
-  const box = document.getElementById("oQuestionBox");
-  const img = document.getElementById("oQuestionImg");
-  if (!box || !img) return;
-  if (currentEventFotoPath) {
-    img.src = gambarPublicUrl(currentEventFotoPath);
-    box.style.display = "block";
-  } else {
-    img.removeAttribute("src");
-    box.style.display = "none";
-  }
-}
-
-function oQuestionImgError() {
-  const box = document.getElementById("oQuestionBox");
-  if (box) box.style.display = "none";
-}
-
-function renderOpsiVoterTable(options, votes) {
+function renderOpsiVoterTable(questions, options, votes) {
   const tbody = document.getElementById("oVoterTable");
   const noteEl = document.getElementById("oVoterListNote");
   if (!tbody) return;
-  const nameMap = {};
-  options.forEach((o) => { nameMap[o.id] = o.nama; });
+  const qMap = {};
+  questions.forEach((q) => { qMap[q.id] = q.pertanyaan; });
+  const oMap = {};
+  options.forEach((o) => { oMap[o.id] = o.nama; });
   if (!votes.length) {
     if (noteEl) noteEl.textContent = "Belum ada yang memilih.";
-    tbody.innerHTML = '<tr><td colspan="3" class="empty">Belum ada yang memilih.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Belum ada yang memilih.</td></tr>';
     return;
   }
-  if (noteEl) noteEl.textContent = votes.length + " orang sudah memilih.";
+  if (noteEl) noteEl.textContent = votes.length + " jawaban tersimpan.";
   tbody.innerHTML = votes.map((v) => {
     const time = v.created_at
       ? new Date(v.created_at).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
       : "–";
-    return "<tr><td>" + escapeHtml(v.nama) + "</td><td>" + escapeHtml(nameMap[v.option_id] || "-") + "</td><td>" + time + "</td></tr>";
+    return "<tr><td>" + escapeHtml(v.nama) + "</td><td>" + escapeHtml(qMap[v.question_id] || "-") + "</td><td>" + escapeHtml(oMap[v.option_id] || "-") + "</td><td>" + time + "</td></tr>";
   }).join("");
 }
 
-async function voteOpsi(optionId) {
+async function voteOpsi(questionId, optionId) {
   const nama = (document.getElementById("oVoteNama").value || "").trim();
   if (!nama) { alert("Isi nama Anda dulu untuk memilih opsi."); return; }
   const client = getSupabase();
   if (!client) return;
 
   const { data: existingVotes, error: dupErr } = await client
-    .from("opsi_votes").select("id,nama")
+    .from("opsi_votes").select("id,option_id,nama")
     .eq("event_id", currentEventId)
+    .eq("question_id", questionId)
     .limit(500);
   if (dupErr) { alert("Gagal memeriksa pilihan: " + (dupErr.message || dupErr)); return; }
   const mine = (existingVotes || []).find(
@@ -610,16 +638,16 @@ async function voteOpsi(optionId) {
 
   if (mine) {
     if (mine.option_id === optionId) { alert("Ini sudah pilihan Anda."); return; }
-    if (!confirm("Anda sudah pernah memilih. Ganti pilihan ke opsi ini?")) return;
+    if (!confirm("Anda sudah menjawab pertanyaan ini. Ganti pilihan ke opsi ini?")) return;
     const { error: delErr } = await client.from("opsi_votes").delete().eq("id", mine.id);
     if (delErr) { alert("Gagal mengganti: " + (delErr.message || delErr)); return; }
   }
 
-  const { error } = await client.from("opsi_votes").insert({ event_id: currentEventId, option_id: optionId, nama });
+  const { error } = await client.from("opsi_votes").insert({ event_id: currentEventId, question_id: questionId, option_id: optionId, nama });
   if (error) {
     const msg = String(error.message || error);
     if (error.code === "23505" || msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("unique")) {
-      alert("Nama ini sudah pernah memilih.");
+      alert("Nama ini sudah pernah menjawab pertanyaan ini.");
     } else {
       alert("Gagal memilih: " + msg);
     }
@@ -696,7 +724,7 @@ async function deleteDesign(id, fotoPath) {
   manageDesign(currentDesignEventId);
 }
 
-// ---------- ADMIN: KELOLA OPSI ----------
+// ---------- ADMIN: KELOLA OPSI (pertanyaan + opsi reusable) ----------
 let currentOpsiEventId = null;
 
 async function manageOpsi(eventId) {
@@ -705,52 +733,213 @@ async function manageOpsi(eventId) {
   const client = getSupabase();
   if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
 
-  const { data: ev } = await client.from("events").select("nama,foto_path").eq("id", eventId).single();
-  const { data, error } = await client.from("opsi_options").select("id,nama,keterangan").eq("event_id", eventId).order("created_at", { ascending: true });
-  if (error) {
-    const msg = String(error.message || error);
-    if (msg.includes("opsi_options") || error.code === "42P01") {
-      body.innerHTML =
-        '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
-        '<div class="message error" style="display:block;">Tabel opsi belum ada. Jalankan <b>supabase-schema.sql</b> terbaru di Supabase SQL Editor, lalu buka lagi.</div>';
+  const backBtn = '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>';
+  const { data: ev } = await client.from("events").select("nama").eq("id", eventId).single();
+  const qRes = await client.from("opsi_questions").select("id,pertanyaan,keterangan,foto_path,urutan,created_at").eq("event_id", eventId).order("urutan", { ascending: true }).order("created_at", { ascending: true });
+  if (qRes.error) {
+    const msg = String(qRes.error.message || qRes.error);
+    if (msg.includes("opsi_questions") || qRes.error.code === "42P01") {
+      body.innerHTML = backBtn + '<div class="message error" style="display:block;">Tabel pertanyaan opsi belum ada. Jalankan <b>supabase-schema.sql</b> terbaru di Supabase SQL Editor, lalu buka lagi.</div>';
       return;
     }
-    body.innerHTML = '<div class="empty">' + escapeHtml(msg) + "</div>";
+    body.innerHTML = backBtn + '<div class="empty">' + escapeHtml(msg) + "</div>";
     return;
   }
 
-  const rows = (data || []).map((o) =>
-    '<div class="admin-row">' +
-    '<div class="ar-name">' + escapeHtml(o.nama) +
-    (o.keterangan ? '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' + escapeHtml(o.keterangan) + "</div>" : "") +
-    "</div>" +
-    '<div class="ar-actions"><button type="button" class="btn btn-sm btn-danger" data-action="deleteOpsi" data-id="' + o.id + '">Hapus</button></div>' +
-    "</div>"
-  ).join("");
+  const questions = qRes.data || [];
+  const { data: optData } = await client.from("opsi_options").select("id,nama,keterangan,created_at").eq("event_id", eventId).order("created_at", { ascending: true });
+  const options = optData || [];
+  const qIds = questions.map((q) => q.id);
+  let links = [];
+  if (qIds.length) {
+    const { data: lk } = await client.from("opsi_question_options").select("question_id,option_id,urutan").in("question_id", qIds);
+    links = lk || [];
+  }
+  const { data: voteData } = await client.from("opsi_votes").select("id,question_id,option_id").eq("event_id", eventId).limit(1000);
+  const votes = voteData || [];
+
+  const optMap = {};
+  options.forEach((o) => { optMap[o.id] = o; });
+  const countByOption = {};
+  votes.forEach((v) => { countByOption[v.option_id] = (countByOption[v.option_id] || 0) + 1; });
+  const linksByQ = {};
+  questions.forEach((q) => { linksByQ[q.id] = []; });
+  links.forEach((l) => { if (linksByQ[l.question_id]) linksByQ[l.question_id].push(l); });
+
+  const usedBefore = [];
+  const blocks = questions.map((q, qi) => {
+    const qLinks = linksByQ[q.id].slice().sort((a, b) => (a.urutan || 0) - (b.urutan || 0));
+    const qOpts = qLinks.map((l) => optMap[l.option_id]).filter(Boolean);
+    const qOptIds = new Set(qOpts.map((o) => o.id));
+
+    const optRows = qOpts.length ? qOpts.map((o) =>
+      '<div class="admin-row">' +
+      '<div class="ar-name">' + escapeHtml(o.nama) +
+      (o.keterangan ? '<div style="font-size:0.75rem;color:var(--muted);font-weight:400;">' + escapeHtml(o.keterangan) + "</div>" : "") +
+      '<div style="font-size:0.72rem;color:var(--muted);font-weight:400;">' + (countByOption[o.id] || 0) + " suara</div>" +
+      "</div>" +
+      '<div class="ar-actions"><button type="button" class="btn btn-sm btn-danger" data-action="removeOpsiOption" data-qid="' + q.id + '" data-oid="' + o.id + '">Hapus dari pertanyaan</button></div>' +
+      "</div>"
+    ).join("") : '<div class="empty">Belum ada opsi di pertanyaan ini.</div>';
+
+    const candidates = [];
+    usedBefore.forEach((oid) => { if (!qOptIds.has(oid) && optMap[oid]) candidates.push(optMap[oid]); });
+    const reuseHtml = candidates.length
+      ? '<div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;">' +
+        '<div style="font-size:0.82rem;color:var(--muted);margin-bottom:4px;">Gunakan opsi dari pertanyaan sebelumnya:</div>' +
+        candidates.map((o) =>
+          '<label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;padding:3px 0;">' +
+          '<input type="checkbox" class="reuse-cb" data-qid="' + q.id + '" value="' + o.id + '" /> ' +
+          escapeHtml(o.nama) + (o.keterangan ? ' <span style="color:var(--muted);font-size:0.75rem;">(' + escapeHtml(o.keterangan) + ")</span>" : "") +
+          "</label>"
+        ).join("") +
+        '<button type="button" class="btn btn-sm" style="width:auto;margin-top:6px;" data-action="attachOpsiOptions" data-id="' + q.id + '">Tambahkan opsi terpilih</button>' +
+        "</div>"
+      : "";
+
+    qOpts.forEach((o) => usedBefore.push(o.id));
+
+    const imgHtml = q.foto_path
+      ? '<img src="' + escapeHtml(gambarPublicUrl(q.foto_path)) + '" style="max-width:100%;max-height:160px;border-radius:10px;display:block;margin:8px 0;cursor:zoom-in;" onclick="openLightbox(this.src)" onerror="this.style.display=\'none\'" />'
+      : '<div class="dashboard-note" style="font-style:italic;margin:6px 0;">Belum ada gambar pertanyaan.</div>';
+
+    return '<div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">' +
+      '<div><h3 style="font-size:0.98rem;margin-bottom:2px;">' + (qi + 1) + ". " + escapeHtml(q.pertanyaan) + "</h3>" +
+      (q.keterangan ? '<div style="font-size:0.78rem;color:var(--muted);">' + escapeHtml(q.keterangan) + "</div>" : "") +
+      "</div>" +
+      '<button type="button" class="btn btn-sm btn-danger" data-action="deleteOpsiQuestion" data-id="' + q.id + '" style="width:auto;">Hapus</button>' +
+      "</div>" +
+      imgHtml +
+      '<div class="form-group" style="margin:8px 0;"><label>Gambar pertanyaan (opsional)</label><input type="file" id="qFile_' + q.id + '" accept="image/*" /></div>' +
+      '<button type="button" class="btn btn-sm btn-success" style="width:auto;" data-action="saveQuestionImage" data-id="' + q.id + '">Simpan Gambar</button>' +
+      (q.foto_path ? ' <button type="button" class="btn btn-sm btn-danger" style="width:auto;" data-action="removeQuestionImage" data-id="' + q.id + '">Hapus Gambar</button>' : "") +
+      '<div style="margin-top:12px;"><h4 style="font-size:0.85rem;margin-bottom:6px;">Opsi pertanyaan ini</h4>' + optRows + "</div>" +
+      '<div class="form-group" style="margin-top:10px;"><label>Tambah opsi baru</label><input type="text" id="qoNama_' + q.id + '" placeholder="Nama opsi" /></div>' +
+      '<div class="form-group"><input type="text" id="qoKet_' + q.id + '" placeholder="Keterangan (opsional)" /></div>' +
+      '<button type="button" class="btn btn-sm" style="width:auto;" data-action="addOpsiOption" data-id="' + q.id + '">Tambah Opsi Baru</button>' +
+      reuseHtml +
+      "</div>";
+  }).join("");
 
   body.innerHTML =
-    '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
+    backBtn +
     '<h2 style="font-size:1.1rem;margin-bottom:4px;">🗳️ Opsi: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
-    '<div class="dashboard-note">Tambah beberapa pilihan untuk dipilih peserta (1 orang 1 suara, bisa ganti).</div>' +
+    '<div class="dashboard-note">Bisa banyak pertanyaan. Tiap orang 1 suara per pertanyaan. Opsi bisa dipakai ulang dari pertanyaan sebelumnya.</div>' +
     '<div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">' +
-    '<h3 style="font-size:0.95rem;margin-bottom:6px;">🖼️ Gambar Pertanyaan (opsional)</h3>' +
-    '<div class="dashboard-note">Gambar ini tampil di atas pilihan opsi sebagai deskripsi pertanyaan.</div>' +
-    (ev && ev.foto_path
-      ? '<img src="' + escapeHtml(gambarPublicUrl(ev.foto_path)) + '" style="max-width:100%;max-height:180px;border-radius:10px;display:block;margin:10px 0;" onerror="villaImgError(this)" />'
-      : '<div class="dashboard-note" style="font-style:italic;margin:8px 0;">Belum ada gambar pertanyaan.</div>') +
-    '<div class="form-group" style="margin-bottom:10px;"><label for="oQFile">Pilih Gambar</label><input type="file" id="oQFile" accept="image/*" /></div>' +
-    '<button type="button" class="btn btn-sm btn-success" data-action="saveQuestionImage" style="width:auto;">Simpan Gambar Pertanyaan</button>' +
-    (ev && ev.foto_path ? ' <button type="button" class="btn btn-sm btn-danger" data-action="removeQuestionImage" style="width:auto;">Hapus Gambar</button>' : "") +
+    '<h3 style="font-size:0.95rem;margin-bottom:6px;">➕ Tambah Pertanyaan</h3>' +
+    '<div class="form-group"><label for="oqPertanyaan">Pertanyaan</label><input type="text" id="oqPertanyaan" placeholder="Contoh: Pilih penginapan" /></div>' +
+    '<div class="form-group"><label for="oqKeterangan">Keterangan (opsional)</label><input type="text" id="oqKeterangan" placeholder="Contoh: untuk tanggal 20 Des" /></div>' +
+    '<div class="form-group"><label for="oqFoto">Gambar pertanyaan (opsional)</label><input type="file" id="oqFoto" accept="image/*" /></div>' +
+    '<button type="button" class="btn btn-sm btn-success" style="width:auto;" data-action="addOpsiQuestion">Tambah Pertanyaan</button>' +
     "</div>" +
-    '<div class="form-group"><label for="oNama">Nama Opsi</label><input type="text" id="oNama" placeholder="Contoh: Villa A - Puncak" /></div>' +
-    '<div class="form-group"><label for="oKet">Keterangan (opsional)</label><input type="text" id="oKet" placeholder="Contoh: Rp 2 jt/malam, kapasitas 15" /></div>' +
-    '<button type="button" class="btn" id="opsiSubmitBtn" data-action="addOpsi">Tambah Opsi</button>' +
-    '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Opsi</h3>' +
-    (rows || '<div class="empty">Belum ada opsi.</div>') + "</div>";
+    '<div style="margin:16px 0;"><h3 style="font-size:1rem;margin-bottom:10px;">Daftar Pertanyaan</h3>' +
+    (blocks || '<div class="empty">Belum ada pertanyaan.</div>') + "</div>";
 }
 
-async function saveQuestionImage() {
-  const fileEl = document.getElementById("oQFile");
+async function addOpsiQuestion() {
+  const pertanyaan = (document.getElementById("oqPertanyaan").value || "").trim();
+  const keterangan = (document.getElementById("oqKeterangan").value || "").trim();
+  const fileEl = document.getElementById("oqFoto");
+  const file = fileEl && fileEl.files[0];
+  if (!pertanyaan) { adminMsg("Pertanyaan wajib diisi.", "error"); return; }
+  const client = getSupabase();
+  if (!client) return;
+
+  let path = "";
+  try {
+    if (file) {
+      if (!file.type.match(/image/)) { adminMsg("File harus berupa gambar.", "error"); return; }
+      path = currentOpsiEventId + "/soal-" + Date.now() + "-" + file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const { error: upErr } = await client.storage.from("gambar").upload(path, file, { upsert: false });
+      if (upErr) throw upErr;
+    }
+    const { data: maxRow } = await client.from("opsi_questions").select("urutan").eq("event_id", currentOpsiEventId).order("urutan", { ascending: false }).limit(1);
+    const urutan = (maxRow && maxRow[0] && Number(maxRow[0].urutan)) || 0;
+    const { error } = await client.from("opsi_questions").insert({ event_id: currentOpsiEventId, pertanyaan, keterangan, foto_path: path, urutan: urutan + 1 });
+    if (error) throw error;
+    manageOpsi(currentOpsiEventId);
+  } catch (err) {
+    adminMsg("Gagal: " + (err.message || err), "error");
+  }
+}
+
+async function deleteOpsiQuestion(id) {
+  if (!confirm("Hapus pertanyaan ini beserta opsi terpasang & suaranya?")) return;
+  const client = getSupabase();
+  if (!client) return;
+  const { data: q } = await client.from("opsi_questions").select("foto_path").eq("id", id).single();
+  const { error } = await client.from("opsi_questions").delete().eq("id", id);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  if (q && q.foto_path) { await client.storage.from("gambar").remove([q.foto_path]); }
+  manageOpsi(currentOpsiEventId);
+}
+
+async function addOpsiOption(questionId) {
+  const namaEl = document.getElementById("qoNama_" + questionId);
+  const ketEl = document.getElementById("qoKet_" + questionId);
+  const nama = (namaEl && namaEl.value || "").trim();
+  const keterangan = (ketEl && ketEl.value || "").trim();
+  if (!nama) { adminMsg("Nama opsi wajib diisi.", "error"); return; }
+  const client = getSupabase();
+  if (!client) return;
+
+  let optionId = null;
+  const { data: existing } = await client.from("opsi_options").select("id,nama").eq("event_id", currentOpsiEventId).limit(500);
+  const found = (existing || []).find((o) => String(o.nama).trim().toLowerCase() === nama.toLowerCase());
+  if (found) {
+    optionId = found.id;
+  } else {
+    const { data: ins, error } = await client.from("opsi_options").insert({ event_id: currentOpsiEventId, nama, keterangan }).select("id").single();
+    if (error) {
+      const msg = String(error.message || error);
+      if (error.code === "23505" || msg.toLowerCase().includes("duplicate")) {
+        const { data: again } = await client.from("opsi_options").select("id,nama").eq("event_id", currentOpsiEventId).limit(500);
+        const f2 = (again || []).find((o) => String(o.nama).trim().toLowerCase() === nama.toLowerCase());
+        if (!f2) { adminMsg("Gagal: " + msg, "error"); return; }
+        optionId = f2.id;
+      } else { adminMsg("Gagal: " + msg, "error"); return; }
+    } else optionId = ins.id;
+  }
+
+  const { error: linkErr } = await client.from("opsi_question_options").insert({ question_id: questionId, option_id: optionId });
+  if (linkErr) {
+    const msg = String(linkErr.message || linkErr);
+    if (linkErr.code === "23505" || msg.toLowerCase().includes("duplicate")) adminMsg("Opsi ini sudah ada di pertanyaan ini.", "error");
+    else adminMsg("Gagal: " + msg, "error");
+    return;
+  }
+  manageOpsi(currentOpsiEventId);
+}
+
+async function attachOpsiOptions(questionId) {
+  const boxes = Array.prototype.slice.call(document.querySelectorAll('.reuse-cb[data-qid="' + questionId + '"]:checked'));
+  if (!boxes.length) { adminMsg("Pilih minimal satu opsi dulu.", "error"); return; }
+  const client = getSupabase();
+  if (!client) return;
+  const rows = boxes.map((b) => ({ question_id: questionId, option_id: b.value }));
+  const { error } = await client.from("opsi_question_options").insert(rows);
+  if (error) {
+    const msg = String(error.message || error);
+    if (error.code === "23505" || msg.toLowerCase().includes("duplicate")) adminMsg("Ada opsi yang sudah terpasang.", "error");
+    else adminMsg("Gagal: " + msg, "error");
+    return;
+  }
+  manageOpsi(currentOpsiEventId);
+}
+
+async function removeOpsiOption(questionId, optionId) {
+  if (!confirm("Hapus opsi ini dari pertanyaan? (opsi tetap tersimpan di pustaka untuk dipakai ulang)")) return;
+  const client = getSupabase();
+  if (!client) return;
+  const { error } = await client.from("opsi_question_options").delete().eq("question_id", questionId).eq("option_id", optionId);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  await client.from("opsi_votes").delete().eq("question_id", questionId).eq("option_id", optionId);
+  manageOpsi(currentOpsiEventId);
+}
+
+async function saveQuestionImage(questionId) {
+  const fileEl = document.getElementById("qFile_" + questionId);
   const file = fileEl && fileEl.files[0];
   if (!file) { adminMsg("Pilih file gambar dulu.", "error"); return; }
   if (!file.type.match(/image/)) { adminMsg("File harus berupa gambar.", "error"); return; }
@@ -760,55 +949,26 @@ async function saveQuestionImage() {
     const path = currentOpsiEventId + "/soal-" + Date.now() + "-" + file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const { error: upErr } = await client.storage.from("gambar").upload(path, file, { upsert: false });
     if (upErr) throw upErr;
-
-    const { data: ev } = await client.from("events").select("foto_path").eq("id", currentOpsiEventId).single();
-    const oldPath = ev && ev.foto_path;
-    const { error } = await client.from("events").update({ foto_path: path }).eq("id", currentOpsiEventId);
+    const { data: q } = await client.from("opsi_questions").select("foto_path").eq("id", questionId).single();
+    const oldPath = q && q.foto_path;
+    const { error } = await client.from("opsi_questions").update({ foto_path: path }).eq("id", questionId);
     if (error) throw error;
     if (oldPath && oldPath !== path) { await client.storage.from("gambar").remove([oldPath]); }
-    currentEventFotoPath = path;
     manageOpsi(currentOpsiEventId);
   } catch (err) {
     adminMsg("Gagal: " + (err.message || err), "error");
   }
 }
 
-async function removeQuestionImage() {
+async function removeQuestionImage(questionId) {
   if (!confirm("Hapus gambar pertanyaan ini?")) return;
   const client = getSupabase();
   if (!client) return;
-  const { data: ev } = await client.from("events").select("foto_path").eq("id", currentOpsiEventId).single();
-  const oldPath = ev && ev.foto_path;
-  const { error } = await client.from("events").update({ foto_path: "" }).eq("id", currentOpsiEventId);
+  const { data: q } = await client.from("opsi_questions").select("foto_path").eq("id", questionId).single();
+  const oldPath = q && q.foto_path;
+  const { error } = await client.from("opsi_questions").update({ foto_path: "" }).eq("id", questionId);
   if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
   if (oldPath) { await client.storage.from("gambar").remove([oldPath]); }
-  currentEventFotoPath = "";
-  manageOpsi(currentOpsiEventId);
-}
-
-async function addOpsi() {
-  const nama = document.getElementById("oNama").value.trim();
-  const keterangan = document.getElementById("oKet").value.trim();
-  if (!nama) { adminMsg("Nama opsi wajib diisi.", "error"); return; }
-  const client = getSupabase();
-  const { error } = await client.from("opsi_options").insert({ event_id: currentOpsiEventId, nama, keterangan });
-  if (error) {
-    const msg = String(error.message || error);
-    if (error.code === "23505" || msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("unique")) {
-      adminMsg("Nama opsi ini sudah ada untuk event ini.", "error");
-    } else {
-      adminMsg("Gagal: " + msg, "error");
-    }
-    return;
-  }
-  manageOpsi(currentOpsiEventId);
-}
-
-async function deleteOpsi(id) {
-  if (!confirm("Hapus opsi ini beserta suaranya?")) return;
-  const client = getSupabase();
-  const { error } = await client.from("opsi_options").delete().eq("id", id);
-  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
   manageOpsi(currentOpsiEventId);
 }
 
@@ -1120,10 +1280,13 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "manageVilla") manageVilla();
   else if (a === "manageDesign") manageDesign(el.dataset.id);
   else if (a === "manageOpsi") manageOpsi(el.dataset.id);
-  else if (a === "addOpsi") addOpsi();
-  else if (a === "deleteOpsi") deleteOpsi(el.dataset.id);
-  else if (a === "saveQuestionImage") saveQuestionImage();
-  else if (a === "removeQuestionImage") removeQuestionImage();
+  else if (a === "addOpsiQuestion") addOpsiQuestion();
+  else if (a === "deleteOpsiQuestion") deleteOpsiQuestion(el.dataset.id);
+  else if (a === "addOpsiOption") addOpsiOption(el.dataset.id);
+  else if (a === "attachOpsiOptions") attachOpsiOptions(el.dataset.id);
+  else if (a === "removeOpsiOption") removeOpsiOption(el.dataset.qid, el.dataset.oid);
+  else if (a === "saveQuestionImage") saveQuestionImage(el.dataset.id);
+  else if (a === "removeQuestionImage") removeQuestionImage(el.dataset.id);
   else if (a === "addDesign") addDesign();
   else if (a === "deleteDesign") deleteDesign(el.dataset.id, el.dataset.path);
   else if (a === "addVilla") addVilla();
@@ -1145,7 +1308,7 @@ document.getElementById("gVoteNama").addEventListener("input", function () {
 document.getElementById("oGallery").addEventListener("click", function (ev) {
   const el = ev.target.closest("[data-option-id]");
   if (!el) return;
-  voteOpsi(el.dataset.optionId);
+  voteOpsi(el.dataset.questionId, el.dataset.optionId);
 });
 document.getElementById("oVoteNama").addEventListener("input", function () {
   if (currentEventMode === "opsi") loadOpsi();
