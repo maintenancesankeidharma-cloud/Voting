@@ -128,6 +128,12 @@ alter table public.responses
 alter table public.events
   add column if not exists mode text not null default 'kehadiran';
 
+-- Kolom event yang mungkin belum ada di tabel lama
+alter table public.events
+  add column if not exists keterangan text default '',
+  add column if not exists aktif boolean not null default true,
+  add column if not exists total_members integer not null default 22;
+
 -- Gambar sebagai deskripsi pertanyaan (untuk event voting opsi)
 alter table public.events
   add column if not exists foto_path text default '';
@@ -238,3 +244,6 @@ begin
     create policy "allow public delete" on public.gambar_votes for delete using (true);
   end if;
 end $$;
+
+-- Muat ulang schema cache PostgREST agar kolom/tabel baru langsung dikenali
+notify pgrst, 'reload schema';
