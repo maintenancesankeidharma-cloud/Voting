@@ -11,6 +11,7 @@ create table if not exists public.events (
   aktif boolean not null default true,
   mode text not null default 'kehadiran',
   total_members integer not null default 22,
+  foto_path text default '',
   created_at timestamptz not null default now()
 );
 
@@ -107,11 +108,13 @@ begin
 end $$;
 
 -- Bucket storage publik untuk gambar
-insert into storage.buckets(id, name, public)values('gambar', 'gambar', true)on conflict(id)do update set public=true;
+insert into storage.buckets(id, name, public) values('gambar', 'gambar', true) on conflict(id) do update set public=true;
 drop policy if exists "gambar anon insert" on storage.objects;
 drop policy if exists "gambar anon select" on storage.objects;
+drop policy if exists "gambar anon delete" on storage.objects;
 create policy "gambar anon insert" on storage.objects for insert with check(bucket_id = 'gambar');
 create policy "gambar anon select" on storage.objects for select using(bucket_id = 'gambar');
+create policy "gambar anon delete" on storage.objects for delete using(bucket_id = 'gambar');
 
 -- ============================================================
 -- KEBUTUHAN UNTUK TABEL LAMA (yang sudah ada kolomnya)
@@ -124,6 +127,10 @@ alter table public.responses
 
 alter table public.events
   add column if not exists mode text not null default 'kehadiran';
+
+-- Gambar sebagai deskripsi pertanyaan (untuk event voting opsi)
+alter table public.events
+  add column if not exists foto_path text default '';
 
 -- gambar_uploads = daftar design (dibuat admin). no_wa tidak dipakai lagi.
 alter table public.gambar_uploads

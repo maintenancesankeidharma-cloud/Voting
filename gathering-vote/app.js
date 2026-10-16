@@ -12,6 +12,7 @@ async function loadEventTotalMembers() {
   currentEventTotalMembers = Number(data.total_members) || 22;
 }
 let currentEventMode = "kehadiran";
+let currentEventFotoPath = "";
 let adminAuthed = sessionStorage.getItem("vote_admin_auth") === "1";
 
 const STATUS_LABEL = { ya: "Ya, Hadir", tidak: "Tidak Hadir" };
@@ -96,7 +97,7 @@ async function openEvent(id) {
 
   const { data, error } = await client
     .from("events")
-    .select("id,nama,keterangan,aktif,mode")
+    .select("id,nama,keterangan,aktif,mode,foto_path")
     .eq("id", id)
     .single();
 
@@ -110,6 +111,7 @@ async function openEvent(id) {
   document.getElementById("evDesc").textContent = data.keterangan || "";
 
   currentEventMode = (data.mode === "gambar" || data.mode === "opsi") ? data.mode : "kehadiran";
+  currentEventFotoPath = data.foto_path || "";
 
   // reset form
   document.getElementById("voteForm").reset();
@@ -474,6 +476,7 @@ async function loadOpsi() {
   if (!gal || !note || !sum) return;
 
   if (!client) { note.textContent = "Supabase belum dikonfigurasi."; return; }
+  renderOpsiQuestion();
 
   const [optsRes, votesRes] = await Promise.all([
     client.from("opsi_options").select("id,nama,keterangan,created_at").eq("event_id", currentEventId).order("created_at", { ascending: true }),
@@ -545,6 +548,24 @@ async function loadOpsi() {
       "</div></div>"
     );
   }).join("");
+}
+
+function renderOpsiQuestion() {
+  const box = document.getElementById("oQuestionBox");
+  const img = document.getElementById("oQuestionImg");
+  if (!box || !img) return;
+  if (currentEventFotoPath) {
+    img.src = gambarPublicUrl(currentEventFotoPath);
+    box.style.display = "block";
+  } else {
+    img.removeAttribute("src");
+    box.style.display = "none";
+  }
+}
+
+function oQuestionImgError() {
+  const box = document.getElementById("oQuestionBox");
+  if (box) box.style.display = "none";
 }
 
 function renderOpsiVoterTable(options, votes) {
@@ -679,7 +700,7 @@ async function manageOpsi(eventId) {
   const client = getSupabase();
   if (!client) { body.innerHTML = '<div class="empty">Supabase belum dikonfigurasi.</div>'; return; }
 
-  const { data: ev } = await client.from("events").select("nama").eq("id", eventId).single();
+  const { data: ev } = await client.from("events").select("nama,foto_path").eq("id", eventId).single();
   const { data, error } = await client.from("opsi_options").select("id,nama,keterangan").eq("event_id", eventId).order("created_at", { ascending: true });
   if (error) {
     const msg = String(error.message || error);
@@ -706,11 +727,58 @@ async function manageOpsi(eventId) {
     '<button type="button" class="btn-back" data-action="backEvents" style="margin-bottom:14px;">← Kembali ke Event</button>' +
     '<h2 style="font-size:1.1rem;margin-bottom:4px;">🗳️ Opsi: ' + escapeHtml(ev ? ev.nama : "") + "</h2>" +
     '<div class="dashboard-note">Tambah beberapa pilihan untuk dipilih peserta (1 orang 1 suara, bisa ganti).</div>' +
+    '<div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">' +
+    '<h3 style="font-size:0.95rem;margin-bottom:6px;">🖼️ Gambar Pertanyaan (opsional)</h3>' +
+    '<div class="dashboard-note">Gambar ini tampil di atas pilihan opsi sebagai deskripsi pertanyaan.</div>' +
+    (ev && ev.foto_path
+      ? '<img src="' + escapeHtml(gambarPublicUrl(ev.foto_path)) + '" style="max-width:100%;max-height:180px;border-radius:10px;display:block;margin:10px 0;" onerror="villaImgError(this)" />'
+      : '<div class="dashboard-note" style="font-style:italic;margin:8px 0;">Belum ada gambar pertanyaan.</div>') +
+    '<div class="form-group" style="margin-bottom:10px;"><label for="oQFile">Pilih Gambar</label><input type="file" id="oQFile" accept="image/*" /></div>' +
+    '<button type="button" class="btn btn-sm btn-success" data-action="saveQuestionImage" style="width:auto;">Simpan Gambar Pertanyaan</button>' +
+    (ev && ev.foto_path ? ' <button type="button" class="btn btn-sm btn-danger" data-action="removeQuestionImage" style="width:auto;">Hapus Gambar</button>' : "") +
+    "</div>" +
     '<div class="form-group"><label for="oNama">Nama Opsi</label><input type="text" id="oNama" placeholder="Contoh: Villa A - Puncak" /></div>' +
     '<div class="form-group"><label for="oKet">Keterangan (opsional)</label><input type="text" id="oKet" placeholder="Contoh: Rp 2 jt/malam, kapasitas 15" /></div>' +
     '<button type="button" class="btn" id="opsiSubmitBtn" data-action="addOpsi">Tambah Opsi</button>' +
     '<div style="margin:16px 0;"><h3 style="font-size:1rem;">Daftar Opsi</h3>' +
     (rows || '<div class="empty">Belum ada opsi.</div>') + "</div>";
+}
+
+async function saveQuestionImage() {
+  const fileEl = document.getElementById("oQFile");
+  const file = fileEl && fileEl.files[0];
+  if (!file) { adminMsg("Pilih file gambar dulu.", "error"); return; }
+  if (!file.type.match(/image/)) { adminMsg("File harus berupa gambar.", "error"); return; }
+  const client = getSupabase();
+  if (!client) return;
+  try {
+    const path = currentOpsiEventId + "/soal-" + Date.now() + "-" + file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const { error: upErr } = await client.storage.from("gambar").upload(path, file, { upsert: false });
+    if (upErr) throw upErr;
+
+    const { data: ev } = await client.from("events").select("foto_path").eq("id", currentOpsiEventId).single();
+    const oldPath = ev && ev.foto_path;
+    const { error } = await client.from("events").update({ foto_path: path }).eq("id", currentOpsiEventId);
+    if (error) throw error;
+    if (oldPath && oldPath !== path) { await client.storage.from("gambar").remove([oldPath]); }
+    currentEventFotoPath = path;
+    manageOpsi(currentOpsiEventId);
+  } catch (err) {
+    adminMsg("Gagal: " + (err.message || err), "error");
+  }
+}
+
+async function removeQuestionImage() {
+  if (!confirm("Hapus gambar pertanyaan ini?")) return;
+  const client = getSupabase();
+  if (!client) return;
+  const { data: ev } = await client.from("events").select("foto_path").eq("id", currentOpsiEventId).single();
+  const oldPath = ev && ev.foto_path;
+  const { error } = await client.from("events").update({ foto_path: "" }).eq("id", currentOpsiEventId);
+  if (error) { adminMsg("Gagal: " + error.message, "error"); return; }
+  if (oldPath) { await client.storage.from("gambar").remove([oldPath]); }
+  currentEventFotoPath = "";
+  manageOpsi(currentOpsiEventId);
 }
 
 async function addOpsi() {
@@ -1049,6 +1117,8 @@ document.getElementById("adminModal").addEventListener("click", function (ev) {
   else if (a === "manageOpsi") manageOpsi(el.dataset.id);
   else if (a === "addOpsi") addOpsi();
   else if (a === "deleteOpsi") deleteOpsi(el.dataset.id);
+  else if (a === "saveQuestionImage") saveQuestionImage();
+  else if (a === "removeQuestionImage") removeQuestionImage();
   else if (a === "addDesign") addDesign();
   else if (a === "deleteDesign") deleteDesign(el.dataset.id, el.dataset.path);
   else if (a === "addVilla") addVilla();
